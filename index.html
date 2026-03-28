@@ -3,939 +3,753 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>🚦 TRAFFIC ARCADE — IoT Dashboard</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap" rel="stylesheet" />
-
+<title>Traffic Light — IoT Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
 :root {
-  --red:      #ff3333;
-  --yellow:   #ffff00;
-  --green:    #00ff44;
-  --blue:     #00aaff;
-  --pink:     #ff44cc;
-  --orange:   #ff8800;
-  --bg:       #0a0a1a;
-  --panel:    #0f0f2a;
-  --border:   #3333aa;
-  --text:     #aaaaff;
-  --bright:   #ffffff;
-  --pixel:    'Press Start 2P', monospace;
-  --vt:       'VT323', monospace;
-  --scanline: rgba(0,0,80,0.15);
+  --bg:          #f0f2f5;
+  --surface:     #ffffff;
+  --surface2:    #f7f8fa;
+  --border:      #e2e5ea;
+  --text:        #1a1d23;
+  --muted:       #6b7280;
+  --red:         #ef4444;
+  --red-dark:    #b91c1c;
+  --green:       #22c55e;
+  --green-dark:  #15803d;
+  --yellow:      #f59e0b;
+  --yellow-dark: #b45309;
+  --blue:        #3b82f6;
+  --blue-dark:   #1d4ed8;
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.04);
+  --radius:      14px;
+  --radius-sm:   8px;
 }
-* { box-sizing:border-box; margin:0; padding:0; image-rendering:pixelated; }
-body {
-  background:var(--bg); color:var(--text); font-family:var(--pixel);
-  min-height:100vh; overflow-x:hidden;
-  cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect x='0' y='0' width='8' height='8' fill='%2300ff44'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%2300ff44'/%3E%3C/svg%3E") 0 0, crosshair;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5;}
+
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow-sm);position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:1rem;}
+.logo-icon{width:32px;height:32px;background:#2563eb;border-radius:8px;display:grid;place-items:center;font-size:16px;}
+.logo-sub{font-size:.72rem;font-weight:400;color:var(--muted);display:block;line-height:1;}
+.header-right{display:flex;align-items:center;gap:14px;}
+.status-chip{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:100px;font-size:.78rem;font-weight:500;background:var(--surface2);border:1px solid var(--border);}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#d1d5db;}
+.status-dot.connected{background:var(--green);box-shadow:0 0 0 2px rgba(34,197,94,.2);animation:pdot 2s infinite;}
+.status-dot.active{background:var(--blue);box-shadow:0 0 0 2px rgba(59,130,246,.2);animation:pdot 2s infinite;}
+@keyframes pdot{0%,100%{opacity:1}50%{opacity:.5}}
+.clock-chip{font-family:'DM Mono',monospace;font-size:.85rem;color:var(--muted);}
+
+main{max-width:1360px;margin:0 auto;padding:20px 20px 40px;display:grid;grid-template-columns:240px 1fr 260px;gap:16px;}
+
+.card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;}
+.card-header{padding:14px 16px 0;display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.card-body{padding:14px 16px 16px;}
+
+/* Traffic light panel */
+.tl-panel{grid-column:1;grid-row:1/3;}
+.tl-housing{width:76px;margin:4px auto 14px;background:#1f2937;border-radius:14px;padding:14px 12px;display:flex;flex-direction:column;gap:10px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.05);position:relative;}
+.tl-housing::after{content:'';position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);width:6px;height:22px;background:#374151;border-radius:0 0 3px 3px;}
+.tl-bulb{width:44px;height:44px;border-radius:50%;background:#374151;transition:all .15s ease;position:relative;}
+.tl-bulb::after{content:'';position:absolute;inset:5px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(255,255,255,.3),transparent 60%);}
+.tl-bulb.red-on   {background:var(--red);   box-shadow:0 0 0 3px rgba(239,68,68,.25),0 0 20px rgba(239,68,68,.65);}
+.tl-bulb.yellow-on{background:var(--yellow);box-shadow:0 0 0 3px rgba(245,158,11,.25),0 0 20px rgba(245,158,11,.65);}
+.tl-bulb.green-on {background:var(--green); box-shadow:0 0 0 3px rgba(34,197,94,.25),0 0 20px rgba(34,197,94,.65);}
+.tl-bulb.blink-anim{animation:blink .4s step-end infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+.state-badge{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;border-radius:100px;font-size:.88rem;font-weight:600;background:#f3f4f6;color:var(--muted);width:100%;transition:all .2s;}
+.state-badge.red{background:#fef2f2;color:var(--red);}
+.state-badge.yellow{background:#fffbeb;color:var(--yellow);}
+.state-badge.green{background:#f0fdf4;color:var(--green);}
+.cd-row{display:flex;align-items:center;justify-content:space-between;margin-top:12px;}
+.cd-label{font-size:.7rem;color:var(--muted);font-weight:500;}
+.cd-num{font-family:'DM Mono',monospace;font-size:1.9rem;font-weight:500;line-height:1;color:var(--text);transition:color .2s;}
+.cd-num.red{color:var(--red);}.cd-num.yellow{color:var(--yellow);}.cd-num.green{color:var(--green);}
+.progress-track{height:5px;background:var(--bg);border-radius:99px;overflow:hidden;margin-top:7px;}
+.progress-fill{height:100%;border-radius:99px;transition:width 1s linear,background .2s;background:var(--muted);}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px;}
+.stat-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px;}
+.stat-key{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:2px;}
+.stat-val{font-family:'DM Mono',monospace;font-size:.95rem;font-weight:500;color:var(--text);}
+
+/* Scene */
+.scene-panel{grid-column:2;grid-row:1;}
+.scene-wrap{position:relative;width:100%;height:340px;border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;background:#3d7a3d;}
+#gameCanvas{display:block;width:100%;height:100%;}
+
+.cam-badge{position:absolute;top:10px;right:12px;font-size:.65rem;font-weight:600;color:#fff;background:rgba(239,68,68,.82);padding:3px 9px;border-radius:4px;letter-spacing:.04em;}
+.loc-tag{position:absolute;top:10px;left:12px;font-size:.7rem;color:rgba(255,255,255,.9);background:rgba(0,0,0,.42);padding:4px 10px;border-radius:6px;}
+
+.drive-hint{position:absolute;bottom:10px;right:12px;display:flex;gap:5px;align-items:center;background:rgba(0,0,0,.42);border-radius:7px;padding:5px 10px;}
+.key-badge{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);font-size:.62rem;font-weight:600;color:#fff;}
+.drive-hint span{font-size:.63rem;color:rgba(255,255,255,.72);}
+
+.violation-flash{position:absolute;inset:0;background:rgba(239,68,68,0);pointer-events:none;border-radius:var(--radius) var(--radius) 0 0;transition:background .12s;}
+.violation-flash.on{background:rgba(239,68,68,.24);}
+
+.scene-infobar{padding:10px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid var(--border);}
+.info-chip{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--muted);font-weight:500;}
+.info-chip b{color:var(--text);}
+.speed-bar-track{width:80px;height:5px;background:var(--bg);border-radius:99px;overflow:hidden;}
+.speed-bar-fill{height:100%;background:var(--green);border-radius:99px;transition:width .1s,background .2s;}
+
+/* Controls */
+.controls-panel{grid-column:3;grid-row:1/3;}
+.ctrl-btn{width:100%;padding:12px 16px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.88rem;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:10px;transition:transform .07s,box-shadow .07s;outline:none;}
+.ctrl-btn:active{transform:translateY(3px);}
+.btn-icon-wrap{width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:13px;flex-shrink:0;}
+.btn-start{background:var(--green);color:#fff;box-shadow:0 4px 0 var(--green-dark);}
+.btn-start:hover{background:#16a34a;box-shadow:0 4px 0 #166534;}
+.btn-start:active{box-shadow:0 1px 0 var(--green-dark);}
+.btn-stop{background:var(--red);color:#fff;box-shadow:0 4px 0 var(--red-dark);}
+.btn-stop:hover{background:#dc2626;box-shadow:0 4px 0 #991b1b;}
+.btn-stop:active{box-shadow:0 1px 0 var(--red-dark);}
+.btn-blink{background:var(--yellow);color:#fff;box-shadow:0 4px 0 var(--yellow-dark);}
+.btn-blink:hover{background:#d97706;box-shadow:0 4px 0 #92400e;}
+.btn-blink:active{box-shadow:0 1px 0 var(--yellow-dark);}
+.mode-indicator{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
+.mode-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);font-size:.77rem;}
+.mode-row:last-child{border-bottom:none;}
+.mode-label{color:var(--muted);font-weight:500;}
+.mode-pip{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .2s,box-shadow .2s;}
+.mode-pip.active{background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.2);}
+.log-list{display:flex;flex-direction:column;max-height:150px;overflow:hidden;}
+.log-entry{display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-bottom:1px solid var(--border);animation:fadeSlide .2s ease;}
+.log-entry:last-child{border-bottom:none;}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.log-time{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);flex-shrink:0;padding-top:1px;}
+.log-msg{font-size:.73rem;font-weight:500;}
+.log-msg.green{color:var(--green-dark);}.log-msg.yellow{color:var(--yellow-dark);}.log-msg.red{color:var(--red-dark);}.log-msg.blue{color:var(--blue-dark);}
+
+/* Graph */
+.graph-panel{grid-column:2;grid-row:2;}
+.graph-body{padding:0 16px 16px;display:flex;gap:14px;}
+.chart-wrap{flex:1;min-width:0;}
+
+/* Metrics */
+.metrics-strip{grid-column:1/4;grid-row:3;display:grid;grid-template-columns:repeat(6,1fr);gap:12px;}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow-sm);border-top:3px solid var(--border);}
+.metric-card.green-card{border-top-color:var(--green);}
+.metric-card.yellow-card{border-top-color:var(--yellow);}
+.metric-card.red-card{border-top-color:var(--red);}
+.metric-card.blue-card{border-top-color:var(--blue);}
+.metric-card.indigo-card{border-top-color:#6366f1;}
+.metric-card.orange-card{border-top-color:#f97316;}
+.mc-label{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;}
+.mc-value{font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:500;color:var(--text);line-height:1;}
+.green-card .mc-value{color:#15803d;}.yellow-card .mc-value{color:#b45309;}.red-card .mc-value{color:#b91c1c;}
+.blue-card .mc-value{color:#1d4ed8;}.indigo-card .mc-value{color:#4338ca;}.orange-card .mc-value{color:#c2410c;}
+
+@media(max-width:1000px){
+  main{grid-template-columns:1fr 1fr;}
+  .tl-panel{grid-column:1;grid-row:1;}.controls-panel{grid-column:2;grid-row:1;}
+  .scene-panel{grid-column:1/3;grid-row:2;}.graph-panel{grid-column:1/3;grid-row:3;}
+  .metrics-strip{grid-column:1/3;grid-row:4;grid-template-columns:repeat(3,1fr);}
 }
-body::before {
-  content:''; position:fixed; inset:0;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,var(--scanline) 3px,var(--scanline) 4px);
-  pointer-events:none; z-index:9999; animation:flicker 8s infinite;
-}
-body::after {
-  content:''; position:fixed; inset:0;
-  background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,0.7) 100%);
-  pointer-events:none; z-index:9998;
-}
-@keyframes flicker { 0%,95%,100%{opacity:1}96%{opacity:0.95}97%{opacity:1}98%{opacity:0.92} }
-
-.pixel-box {
-  border:4px solid var(--border);
-  box-shadow:inset 0 0 0 2px #000,4px 4px 0 #000,0 0 20px rgba(51,51,170,0.3);
-  background:var(--panel); position:relative;
-}
-.pixel-box::before {
-  content:''; position:absolute; inset:2px;
-  border:2px solid rgba(100,100,255,0.1); pointer-events:none;
-}
-
-/* HEADER */
-header { position:relative; z-index:10; background:#050510; border-bottom:4px solid var(--border); box-shadow:0 4px 0 #000,0 0 40px rgba(0,100,255,0.2); overflow:hidden; }
-.header-marquee { background:var(--border); color:var(--yellow); font-family:var(--pixel); font-size:0.45rem; padding:4px 0; white-space:nowrap; overflow:hidden; border-bottom:2px solid #000; }
-.marquee-inner { display:inline-block; animation:marquee 18s linear infinite; }
-@keyframes marquee { from{transform:translateX(100vw)}to{transform:translateX(-100%)} }
-.header-main { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; gap:12px; flex-wrap:wrap; }
-.arcade-title { font-family:var(--pixel); font-size:0.75rem; color:var(--yellow); text-shadow:3px 3px 0 #aa6600,0 0 20px rgba(255,255,0,0.5); animation:title-pulse 2s ease-in-out infinite alternate; letter-spacing:0.05em; line-height:1.6; }
-@keyframes title-pulse { from{text-shadow:3px 3px 0 #aa6600,0 0 10px rgba(255,255,0,0.3)}to{text-shadow:3px 3px 0 #ff8800,0 0 30px rgba(255,255,0,0.8)} }
-.header-pills { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-.pill { display:flex; align-items:center; gap:6px; padding:4px 8px; border:2px solid #333; background:#000; font-family:var(--pixel); font-size:0.35rem; box-shadow:2px 2px 0 #000; }
-.pill-dot { width:8px; height:8px; background:#333; border:1px solid #666; }
-.pill-dot.on  { background:var(--green); box-shadow:0 0 6px var(--green); animation:blink-dot 1s step-end infinite; }
-.pill-dot.off { background:var(--red); }
-@keyframes blink-dot { 0%,100%{opacity:1}50%{opacity:0.3} }
-.coin-display { font-family:var(--pixel); font-size:0.45rem; color:var(--yellow); text-shadow:1px 1px 0 #aa6600; display:flex; align-items:center; gap:6px; }
-.clock-display { font-family:var(--vt); font-size:1.4rem; color:var(--green); text-shadow:0 0 10px var(--green); letter-spacing:0.1em; }
-
-/* LAYOUT */
-main { position:relative; z-index:10; display:grid; grid-template-columns:220px 1fr 260px; grid-template-rows:auto auto auto; gap:10px; padding:10px 14px 20px; max-width:1440px; margin:0 auto; }
-
-/* TRAFFIC LIGHT PANEL */
-.tl-panel { grid-column:1; grid-row:1/3; }
-.panel-title { font-family:var(--pixel); font-size:0.4rem; color:var(--yellow); text-shadow:1px 1px 0 #aa6600; padding:6px 8px; background:#000; border-bottom:2px solid var(--border); display:flex; align-items:center; gap:6px; letter-spacing:0.05em; }
-.panel-title::before { content:'▶'; color:var(--green); font-size:0.35rem; }
-.tl-body { padding:12px; display:flex; flex-direction:column; align-items:center; gap:10px; }
-.tl-housing { width:70px; background:#111; border:3px solid #444; box-shadow:3px 3px 0 #000,inset 2px 2px 0 #222; padding:10px 8px; display:flex; flex-direction:column; gap:10px; align-items:center; position:relative; }
-.tl-housing::after { content:''; position:absolute; bottom:-28px; left:50%; transform:translateX(-50%); width:6px; height:28px; background:#444; border:2px solid #222; }
-.tl-bulb { width:44px; height:44px; border:3px solid #333; background:#1a1a1a; clip-path:polygon(20% 0%,80% 0%,100% 20%,100% 80%,80% 100%,20% 100%,0% 80%,0% 20%); transition:all 0.1s step-end; }
-.tl-bulb.red-off    { background:#330000; box-shadow:none; }
-.tl-bulb.yellow-off { background:#332200; box-shadow:none; }
-.tl-bulb.green-off  { background:#001100; box-shadow:none; }
-.tl-bulb.red-on    { background:var(--red);    box-shadow:0 0 0 4px rgba(255,50,50,0.3),0 0 20px var(--red);    animation:bulb-pop 0.1s step-end; }
-.tl-bulb.yellow-on { background:var(--yellow); box-shadow:0 0 0 4px rgba(255,255,0,0.3),0 0 20px var(--yellow); animation:bulb-pop 0.1s step-end; }
-.tl-bulb.green-on  { background:var(--green);  box-shadow:0 0 0 4px rgba(0,255,50,0.3),0 0 20px var(--green);  animation:bulb-pop 0.1s step-end; }
-.tl-bulb.blink-anim { animation:pixel-blink 0.3s step-end infinite; }
-@keyframes pixel-blink { 0%,100%{opacity:1}50%{opacity:0} }
-@keyframes bulb-pop { 0%{transform:scale(1.2)}100%{transform:scale(1)} }
-.state-banner { font-family:var(--pixel); font-size:0.55rem; text-align:center; padding:6px 10px; border:2px solid currentColor; box-shadow:2px 2px 0 #000; letter-spacing:0.05em; margin-top:30px; min-width:130px; }
-.state-banner.red    { color:var(--red);    background:#1a0000; text-shadow:0 0 10px var(--red); }
-.state-banner.yellow { color:var(--yellow); background:#1a1a00; text-shadow:0 0 10px var(--yellow); }
-.state-banner.green  { color:var(--green);  background:#001a00; text-shadow:0 0 10px var(--green); }
-.state-banner.off    { color:#555; background:#111; }
-.countdown-block { display:flex; flex-direction:column; align-items:center; gap:4px; margin-top:4px; }
-.cd-label { font-family:var(--pixel); font-size:0.3rem; color:#555; }
-.cd-number { font-family:var(--pixel); font-size:1.6rem; color:var(--bright); text-shadow:3px 3px 0 #000,0 0 15px currentColor; line-height:1; min-width:2ch; text-align:center; }
-.cd-number.red    { color:var(--red); }
-.cd-number.yellow { color:var(--yellow); }
-.cd-number.green  { color:var(--green); }
-.cd-bar-wrap { width:130px; height:10px; background:#111; border:2px solid #333; box-shadow:2px 2px 0 #000; }
-.cd-bar { height:100%; background:var(--green); transition:width 1s linear,background 0.2s step-end; }
-.stats-grid { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:6px; }
-.stat-cell { background:#000; border:2px solid #222; padding:5px 6px; box-shadow:1px 1px 0 #000; }
-.stat-cell-key { font-family:var(--pixel); font-size:0.28rem; color:#555; margin-bottom:2px; }
-.stat-cell-val { font-family:var(--vt); font-size:1rem; color:var(--bright); line-height:1; }
-
-/* ═══════════════════════════════════════════════
-   SAYRE HWY — MANOLO FORTICH PIXEL SCENE
-   ═══════════════════════════════════════════════ */
-.scene-panel { grid-column:2; grid-row:1; padding:0; overflow:hidden; }
-.scene { width:100%; height:300px; position:relative; overflow:hidden; image-rendering:pixelated; }
-
-/* Philippine daytime sky */
-.mf-sky {
-  position:absolute; inset:0;
-  background:linear-gradient(180deg,#3a7bd5 0%,#5ba0e8 30%,#7ec8f5 60%,#aadcf8 80%,#c8e8f0 100%);
-}
-
-/* Clouds */
-.cloud { position:absolute; background:#fff; }
-.cloud::before,.cloud::after { content:''; position:absolute; background:#fff; }
-.cloud-1 { width:48px; height:14px; top:14px; animation:cloud-move 22s linear infinite; }
-.cloud-1::before { width:28px; height:12px; top:-10px; left:8px; }
-.cloud-1::after  { width:14px; height:8px;  top:-4px;  left:30px; }
-.cloud-2 { width:64px; height:16px; top:36px; animation:cloud-move 30s linear infinite; animation-delay:-12s; }
-.cloud-2::before { width:40px; height:14px; top:-12px; left:10px; }
-.cloud-2::after  { width:20px; height:10px; top:-5px;  left:42px; }
-.cloud-3 { width:40px; height:12px; top:10px; animation:cloud-move 26s linear infinite; animation-delay:-6s; }
-.cloud-3::before { width:22px; height:10px; top:-8px; left:6px; }
-.cloud-3::after  { width:12px; height:6px;  top:-3px; left:24px; }
-.cloud-4 { width:56px; height:14px; top:52px; animation:cloud-move 35s linear infinite; animation-delay:-20s; }
-.cloud-4::before { width:34px; height:12px; top:-10px; left:8px; }
-.cloud-4::after  { width:16px; height:8px;  top:-3px;  left:36px; }
-@keyframes cloud-move { from{left:-120px}to{left:110%} }
-
-/* Hills */
-.mf-hills-far {
-  position:absolute; bottom:116px; left:0; right:0; height:55px;
-  background:linear-gradient(180deg,#2d6e2d 0%,#246024 100%);
-  clip-path:polygon(0% 100%,0% 68%,4% 52%,8% 64%,13% 38%,17% 54%,22% 28%,27% 46%,32% 18%,36% 34%,40% 14%,44% 30%,48% 8%,52% 26%,56% 16%,60% 33%,64% 20%,68% 38%,72% 26%,76% 43%,80% 30%,84% 48%,88% 36%,92% 53%,96% 40%,100% 58%,100% 100%);
-}
-.mf-hills-mid {
-  position:absolute; bottom:108px; left:0; right:0; height:46px;
-  background:linear-gradient(180deg,#3a8a3a 0%,#2d6e2d 100%);
-  clip-path:polygon(0% 100%,0% 78%,5% 58%,10% 73%,16% 48%,22% 66%,28% 40%,33% 56%,38% 33%,43% 50%,49% 36%,55% 53%,60% 38%,65% 58%,70% 43%,76% 60%,82% 46%,88% 63%,94% 48%,100% 66%,100% 100%);
-}
-
-/* Sidewalk/dirt shoulder */
-.mf-shoulder-left  { position:absolute; bottom:68px; left:0; width:60px; height:10px; background:#c4a882; border-top:2px solid #d4b892; }
-.mf-shoulder-right { position:absolute; bottom:68px; right:0; width:60px; height:10px; background:#c4a882; border-top:2px solid #d4b892; }
-
-/* Road */
-.mf-road { position:absolute; bottom:0; left:0; right:0; height:76px; background:#5c5c5c; border-top:3px solid #888; }
-.mf-road .center-line { position:absolute; left:0; right:0; height:3px; top:50%; transform:translateY(-50%); background:#ffee00; opacity:0.7; }
-.lane-dash {
-  position:absolute; left:0; right:0; height:4px;
-  background:repeating-linear-gradient(90deg,#fff 0,#fff 14px,transparent 14px,transparent 28px);
-  opacity:0.55;
-}
-.lane-dash.moving { animation:lane-scroll 0.6s linear infinite; }
-.lane-dash.slow   { animation:lane-scroll 1.8s linear infinite; }
-@keyframes lane-scroll { from{background-position:0 0}to{background-position:28px 0} }
-.zebra { position:absolute; bottom:0; left:0; right:0; height:18px; background:repeating-linear-gradient(90deg,#fff 0,#fff 12px,transparent 12px,transparent 22px); opacity:0.8; }
-
-/* Overhead arm traffic light */
-.arm-pole       { position:absolute; background:#666; border:1px solid #888; z-index:12; width:6px; }
-.arm-horizontal { position:absolute; height:5px; background:#666; border:1px solid #888; z-index:12; }
-.arm-tl-box {
-  position:absolute; background:#111; border:2px solid #555;
-  box-shadow:2px 2px 0 #000; z-index:13;
-  padding:3px 2px; display:flex; flex-direction:column; gap:2px; align-items:center;
-  width:20px;
-}
-.arm-tl-box::before { content:''; position:absolute; top:-8px; left:50%; transform:translateX(-50%); width:2px; height:8px; background:#666; }
-.asbulb { width:10px; height:10px; background:#1a0000; border:1px solid #444; }
-.asbulb.r { background:#1a0000; }
-.asbulb.y { background:#1a1000; }
-.asbulb.g { background:#001a00; }
-.asbulb.r.on { background:var(--red);    box-shadow:0 0 8px var(--red); }
-.asbulb.y.on { background:var(--yellow); box-shadow:0 0 8px var(--yellow); }
-.asbulb.g.on { background:var(--green);  box-shadow:0 0 8px var(--green); }
-.asbulb.blink-anim { animation:pixel-blink 0.3s step-end infinite; }
-
-/* Jollibee sign */
-.jollibee-sign {
-  position:absolute; z-index:9;
-  width:30px; height:20px;
-  background:#cc0000; border:2px solid #ff2222;
-  box-shadow:2px 2px 0 #000,0 0 8px rgba(255,0,0,0.4);
-  display:flex; align-items:center; justify-content:center;
-  animation:jb-glow 1.5s ease-in-out infinite alternate;
-  font-family:var(--pixel); font-size:0.22rem; color:#ffee00; letter-spacing:0;
-}
-@keyframes jb-glow { from{box-shadow:2px 2px 0 #000,0 0 5px rgba(255,0,0,0.3)}to{box-shadow:2px 2px 0 #000,0 0 14px rgba(255,0,0,0.7)} }
-
-/* Car lanes */
-.car-lane          { position:absolute; bottom:8px;  left:0; right:0; height:30px; overflow:visible; }
-.car-lane-oncoming { position:absolute; bottom:40px; left:0; right:0; height:28px; overflow:visible; }
-
-/* Vehicles */
-.pcar { position:absolute; bottom:0; width:36px; height:20px; }
-.pcar .body  { position:absolute; bottom:4px; left:0; right:0; height:12px; border:2px solid; }
-.pcar .roof  { position:absolute; bottom:14px; left:8px; right:8px; height:8px; border:2px solid; border-bottom:none; }
-.pcar .wheel-f,.pcar .wheel-r { position:absolute; bottom:0; width:8px; height:8px; background:#111; border:2px solid #555; }
-.pcar .wheel-f { right:2px; } .pcar .wheel-r { left:2px; }
-.pcar .headlight { position:absolute; right:-2px; bottom:7px; width:3px; height:3px; background:#ffffaa; box-shadow:0 0 6px #ffffaa,0 0 14px rgba(255,255,180,0.5); }
-.pcar .taillight  { position:absolute; left:-1px;  bottom:7px; width:3px; height:3px; background:var(--red); }
-.pcar .taillight.brake { box-shadow:0 0 8px var(--red); }
-.car-blue   .body { background:#0044aa; border-color:#0066ff; } .car-blue   .roof { background:#003388; border-color:#0055cc; }
-.car-red    .body { background:#aa0000; border-color:#ff2222; } .car-red    .roof { background:#880000; border-color:#cc1111; }
-.car-white  .body { background:#aaaacc; border-color:#ccccee; } .car-white  .roof { background:#8888aa; border-color:#aaaacc; }
-.car-silver .body { background:#888899; border-color:#aaaacc; } .car-silver .roof { background:#666677; border-color:#888899; }
-.car-green  .body { background:#006600; border-color:#00cc00; } .car-green  .roof { background:#004400; border-color:#008800; }
-
-/* Tricycle */
-.ptrike { position:absolute; bottom:0; width:30px; height:24px; }
-.ptrike .t-sidecar { position:absolute; bottom:5px; left:0; width:18px; height:14px; background:#cc3300; border:2px solid #ff5522; }
-.ptrike .t-moto    { position:absolute; bottom:5px; right:0; width:14px; height:13px; background:#333; border:2px solid #555; }
-.ptrike .t-roof    { position:absolute; bottom:17px; left:0; width:18px; height:7px; background:#cc3300; border:2px solid #ff5522; border-bottom:none; }
-.ptrike .t-ws { position:absolute; bottom:0; left:3px; width:8px; height:8px; background:#111; border:2px solid #555; }
-.ptrike .t-wf { position:absolute; bottom:0; right:1px; width:7px; height:7px; background:#111; border:2px solid #555; }
-.ptrike .t-light { position:absolute; right:-1px; bottom:9px; width:2px; height:2px; background:#ffffaa; box-shadow:0 0 4px #ffffaa; }
-
-/* Jeepney */
-.pjeep { position:absolute; bottom:0; width:54px; height:30px; }
-.pjeep .j-body  { position:absolute; bottom:6px; left:0; right:0; height:18px; background:#1a6699; border:2px solid #22aadd; }
-.pjeep .j-top   { position:absolute; bottom:22px; left:2px; right:10px; height:8px; background:#155577; border:2px solid #22aadd; border-bottom:none; }
-.pjeep .j-grill { position:absolute; bottom:10px; right:0; width:6px; height:10px; background:#c8a000; border:2px solid #ffcc00; }
-.pjeep .j-decor { position:absolute; bottom:15px; left:3px; right:12px; height:3px; background:repeating-linear-gradient(90deg,#ff3300 0,#ff3300 4px,#ffcc00 4px,#ffcc00 8px); }
-.pjeep .j-wf { position:absolute; bottom:0; right:3px;  width:10px; height:10px; background:#111; border:2px solid #555; }
-.pjeep .j-wr { position:absolute; bottom:0; left:3px;   width:10px; height:10px; background:#111; border:2px solid #555; }
-.pjeep .j-light { position:absolute; right:-2px; bottom:12px; width:3px; height:4px; background:#ffffaa; box-shadow:0 0 6px #ffffaa; }
-
-/* Truck */
-.ptruck { position:absolute; bottom:0; width:56px; height:24px; }
-.ptruck .truck-body { position:absolute; bottom:6px; left:0; right:0; height:14px; background:#334; border:2px solid #556; }
-.ptruck .truck-cab  { position:absolute; bottom:6px; right:0; width:18px; height:18px; background:#445; border:2px solid #667; }
-.ptruck .truck-wheel-f { position:absolute; bottom:0; right:3px; width:10px; height:10px; background:#111; border:2px solid #555; }
-.ptruck .truck-wheel-r { position:absolute; bottom:0; left:5px;  width:10px; height:10px; background:#111; border:2px solid #555; }
-.ptruck .truck-headlight { position:absolute; right:-2px; bottom:10px; width:3px; height:3px; background:#ffffaa; box-shadow:0 0 8px #ffffaa; }
-
-.wheel-spin { animation:wspin 0.4s linear infinite; }
-.wheel-slow { animation:wspin 1.2s linear infinite; }
-@keyframes wspin { from{transform:rotate(0)}to{transform:rotate(360deg)} }
-
-/* Speed fx */
-.speed-fx { position:absolute; height:2px; background:linear-gradient(90deg,transparent,rgba(200,220,255,0.5)); opacity:0; pointer-events:none; }
-.speed-fx.show { opacity:1; animation:sfx 0.3s linear infinite; }
-@keyframes sfx { from{transform:translateX(0)}to{transform:translateX(30px);opacity:0} }
-
-/* Score popup */
-.score-popup { position:absolute; font-family:var(--pixel); font-size:0.5rem; color:var(--yellow); text-shadow:1px 1px 0 #aa6600; pointer-events:none; animation:score-rise 1.2s ease-out forwards; z-index:20; }
-@keyframes score-rise { 0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-30px)} }
-
-/* Location tag */
-.scene-location { position:absolute; top:6px; left:8px; z-index:15; font-family:var(--pixel); font-size:0.26rem; color:#fff; text-shadow:1px 1px 0 #000; background:rgba(0,0,0,0.65); padding:3px 7px; border:1px solid #444; }
-
-/* CONTROLS */
-.controls-panel { grid-column:3; grid-row:1/3; }
-.ctrl-body { padding:10px; display:flex; flex-direction:column; gap:8px; }
-.pixel-btn { width:100%; padding:10px 12px; font-family:var(--pixel); font-size:0.38rem; letter-spacing:0.05em; cursor:pointer; border:3px solid; background:#000; display:flex; align-items:center; gap:8px; transition:all 0.05s step-end; box-shadow:3px 3px 0 #000; text-transform:uppercase; }
-.pixel-btn:hover  { transform:translate(-1px,-1px); box-shadow:4px 4px 0 #000; }
-.pixel-btn:active { transform:translate(2px,2px); box-shadow:1px 1px 0 #000; }
-.btn-start { color:var(--green);  border-color:var(--green);  text-shadow:0 0 8px var(--green); }
-.btn-stop  { color:var(--red);    border-color:var(--red);    text-shadow:0 0 8px var(--red); }
-.btn-blink { color:var(--yellow); border-color:var(--yellow); text-shadow:0 0 8px var(--yellow); }
-.btn-icon  { font-size:0.7rem; }
-.mode-indicator { background:#000; border:2px solid #333; padding:8px; box-shadow:2px 2px 0 #000; }
-.mode-row { display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid #111; font-family:var(--pixel); font-size:0.3rem; }
-.mode-row:last-child { border-bottom:none; }
-.mode-key { color:#444; }
-.mode-dot { color:#222; font-size:0.4rem; }
-.mode-dot.active { color:var(--green); text-shadow:0 0 6px var(--green); }
-.log-section { margin-top:2px; }
-.log-title { font-family:var(--pixel); font-size:0.35rem; color:var(--yellow); padding:4px 6px; background:#000; border:2px solid #333; border-bottom:none; display:flex; align-items:center; gap:6px; }
-.log-box { background:#000; border:2px solid #333; padding:4px; max-height:160px; overflow:hidden; box-shadow:2px 2px 0 #000; }
-.log-entry { display:flex; gap:6px; padding:2px 0; border-bottom:1px solid #111; font-family:var(--pixel); font-size:0.28rem; animation:log-in 0.1s step-end; }
-@keyframes log-in { from{background:#111}to{background:transparent} }
-.log-time { color:#333; flex-shrink:0; }
-.log-msg  { color:#aaa; }
-.log-msg.green  { color:var(--green); }
-.log-msg.yellow { color:var(--yellow); }
-.log-msg.red    { color:var(--red); }
-.log-msg.blue   { color:var(--blue); }
-
-/* GRAPH */
-.graph-panel { grid-column:2; grid-row:2; }
-.graph-body { padding:10px; display:flex; gap:10px; }
-.chart-wrap { flex:1; min-width:0; }
-.chart-wrap canvas { display:block; }
-
-/* METRICS */
-.metrics-panel { grid-column:1/4; grid-row:3; display:grid; grid-template-columns:repeat(6,1fr); gap:8px; }
-.metric-card { padding:0; overflow:hidden; }
-.metric-card .mc-title { font-family:var(--pixel); font-size:0.28rem; color:#555; padding:4px 6px; background:#000; border-bottom:2px solid #222; letter-spacing:0.05em; }
-.metric-card .mc-val   { font-family:var(--pixel); font-size:1rem; color:var(--bright); padding:8px 6px 6px; line-height:1; text-shadow:2px 2px 0 #000; }
-.metric-card.green-card  .mc-val { color:var(--green);  text-shadow:2px 2px 0 #000,0 0 10px var(--green); }
-.metric-card.yellow-card .mc-val { color:var(--yellow); text-shadow:2px 2px 0 #000,0 0 10px var(--yellow); }
-.metric-card.red-card    .mc-val { color:var(--red);    text-shadow:2px 2px 0 #000,0 0 10px var(--red); }
-.metric-card.blue-card   .mc-val { color:var(--blue);   text-shadow:2px 2px 0 #000,0 0 10px var(--blue); }
-.metric-card.pink-card   .mc-val { color:var(--pink);   text-shadow:2px 2px 0 #000,0 0 10px var(--pink); }
-.metric-card.orange-card .mc-val { color:var(--orange); text-shadow:2px 2px 0 #000,0 0 10px var(--orange); }
-
-/* SCORE */
-.score-bar { position:fixed; top:0; right:0; z-index:10000; background:#000; border-left:3px solid var(--border); border-bottom:3px solid var(--border); padding:4px 10px; font-family:var(--pixel); font-size:0.4rem; color:var(--yellow); text-shadow:1px 1px 0 #aa6600; }
-
-/* RESPONSIVE */
-@media (max-width:960px) {
-  main { grid-template-columns:1fr 1fr; grid-template-rows:auto auto auto auto; }
-  .tl-panel { grid-column:1; grid-row:1; } .controls-panel { grid-column:2; grid-row:1; }
-  .scene-panel { grid-column:1/3; grid-row:2; } .graph-panel { grid-column:1/3; grid-row:3; }
-  .metrics-panel { grid-column:1/3; grid-row:4; grid-template-columns:repeat(3,1fr); }
-}
-@media (max-width:580px) {
-  main { grid-template-columns:1fr; }
-  .tl-panel,.controls-panel,.scene-panel,.graph-panel { grid-column:1; }
-  .metrics-panel { grid-column:1; grid-template-columns:repeat(2,1fr); }
-  .arcade-title { font-size:0.55rem; }
+@media(max-width:600px){
+  main{grid-template-columns:1fr;padding:12px;}
+  .tl-panel,.controls-panel,.scene-panel,.graph-panel{grid-column:1;}
+  .metrics-strip{grid-column:1;grid-template-columns:repeat(2,1fr);}
 }
 </style>
 </head>
 <body>
 
-<div class="score-bar" id="scoreBar">SCORE: <span id="scoreVal">000000</span></div>
-
 <header>
-  <div class="header-marquee">
-    <span class="marquee-inner">
-      ★ INSERT COIN TO PLAY ★ &nbsp;&nbsp;&nbsp; TRAFFIC ARCADE v3.0 &nbsp;&nbsp;&nbsp; HIGH SCORE: 999999 &nbsp;&nbsp;&nbsp;
-      ★ USE CONTROLS TO MANAGE TRAFFIC ★ &nbsp;&nbsp;&nbsp; FIREBASE REALTIME DATABASE &nbsp;&nbsp;&nbsp;
-      ★ PLAYER 1 START ★ &nbsp;&nbsp;&nbsp; ESP32 IOT SYSTEM &nbsp;&nbsp;&nbsp; 📍 SAYRE HWY — MANOLO FORTICH, BUKIDNON &nbsp;&nbsp;&nbsp; MADE WITH ❤ BY ERICK &nbsp;&nbsp;&nbsp;
-    </span>
+  <div class="logo">
+    <div class="logo-icon">🚦</div>
+    <div>Traffic IoT Dashboard<span class="logo-sub">ESP32 · Firebase Realtime · Sayre Hwy, Manolo Fortich</span></div>
   </div>
-  <div class="header-main">
-    <div class="arcade-title">🚦 TRAFFIC<br>ARCADE</div>
-    <div class="header-pills">
-      <div class="pill"><div class="pill-dot" id="fbDot"></div><span id="fbLabel">FIREBASE</span></div>
-      <div class="pill"><div class="pill-dot" id="espDot"></div><span id="espLabel">ESP32</span></div>
-    </div>
-    <div class="coin-display">🪙 COINS: <span id="coinVal">00</span></div>
-    <div class="clock-display" id="clockDisplay">00:00:00</div>
+  <div class="header-right">
+    <div class="status-chip"><div class="status-dot" id="fbDot"></div><span id="fbLabel">Firebase</span></div>
+    <div class="status-chip"><div class="status-dot" id="espDot"></div><span id="espLabel">ESP32</span></div>
+    <div class="clock-chip" id="clockDisplay">00:00:00</div>
   </div>
 </header>
 
 <main>
 
-  <!-- LEFT: Traffic Light -->
-  <div class="pixel-box tl-panel">
-    <div class="panel-title">TRAFFIC UNIT</div>
-    <div class="tl-body">
-      <div class="tl-housing">
-        <div class="tl-bulb red-off"    id="bulbRed"></div>
-        <div class="tl-bulb yellow-off" id="bulbYellow"></div>
-        <div class="tl-bulb green-off"  id="bulbGreen"></div>
+  <!-- Traffic Light -->
+  <div class="card tl-panel">
+    <div class="card-header"><span class="card-title">Traffic Unit</span></div>
+    <div class="card-body">
+      <div style="padding-top:6px;padding-bottom:28px;">
+        <div class="tl-housing">
+          <div class="tl-bulb" id="bulbRed"></div>
+          <div class="tl-bulb" id="bulbYellow"></div>
+          <div class="tl-bulb" id="bulbGreen"></div>
+        </div>
       </div>
-      <div class="state-banner off" id="stateLabel">-- OFF --</div>
-      <div class="countdown-block">
-        <div class="cd-label">TIME LEFT</div>
-        <div class="cd-number" id="cdNum">--</div>
-        <div class="cd-bar-wrap"><div class="cd-bar" id="cdBar" style="width:0%"></div></div>
+      <div class="state-badge" id="stateLabel">— Offline —</div>
+      <div class="cd-row">
+        <span class="cd-label">Time Remaining</span>
+        <span class="cd-num" id="cdNum">--</span>
       </div>
-      <div class="stats-grid">
-        <div class="stat-cell"><div class="stat-cell-key">MODE</div><div class="stat-cell-val" id="modeVal">---</div></div>
-        <div class="stat-cell"><div class="stat-cell-key">CYCLES</div><div class="stat-cell-val" id="cycleVal">0</div></div>
-        <div class="stat-cell"><div class="stat-cell-key">UPTIME</div><div class="stat-cell-val" id="uptimeVal">00:00</div></div>
-        <div class="stat-cell"><div class="stat-cell-key">PREV</div><div class="stat-cell-val" id="prevVal">---</div></div>
+      <div class="progress-track"><div class="progress-fill" id="cdBar" style="width:0%"></div></div>
+      <div class="stat-grid">
+        <div class="stat-item"><div class="stat-key">Mode</div><div class="stat-val" id="modeVal">---</div></div>
+        <div class="stat-item"><div class="stat-key">Cycles</div><div class="stat-val" id="cycleVal">0</div></div>
+        <div class="stat-item"><div class="stat-key">Uptime</div><div class="stat-val" id="uptimeVal">00:00</div></div>
+        <div class="stat-item"><div class="stat-key">Prev</div><div class="stat-val" id="prevVal">---</div></div>
       </div>
     </div>
   </div>
 
-  <!-- CENTER: Sayre Hwy Scene -->
-  <div class="pixel-box scene-panel">
-    <div class="panel-title">📍 TRAFFIC CAM — SAYRE HWY, MANOLO FORTICH BUK</div>
-    <div class="scene" id="scene">
-
-      <!-- Sky -->
-      <div class="mf-sky"></div>
-
-      <!-- Clouds (animated) -->
-      <div class="cloud cloud-1" style="left:-120px;"></div>
-      <div class="cloud cloud-2" style="left:10%;"></div>
-      <div class="cloud cloud-3" style="left:40%;"></div>
-      <div class="cloud cloud-4" style="left:70%;"></div>
-
-      <!-- Background hills -->
-      <div class="mf-hills-far"></div>
-      <div class="mf-hills-mid"></div>
-
-      <!-- Buildings (drawn on canvas) -->
-      <canvas id="buildingCanvas" style="position:absolute;bottom:68px;left:0;image-rendering:pixelated;z-index:3;"></canvas>
-
-      <!-- Jollibee sign -->
-      <div class="jollibee-sign" id="jbSign">JB</div>
-
-      <!-- Utility poles + wire SVG -->
-      <div id="poleLayer" style="position:absolute;inset:0;pointer-events:none;z-index:8;overflow:hidden;"></div>
-
-      <!-- Overhead arm traffic light -->
-      <div class="arm-pole"       id="armPole"></div>
-      <div class="arm-horizontal" id="armH"></div>
-      <div class="arm-tl-box"     id="armTlBox">
-        <div class="asbulb r" id="asb-r"></div>
-        <div class="asbulb y" id="asb-y"></div>
-        <div class="asbulb g" id="asb-g"></div>
+  <!-- Scene -->
+  <div class="card scene-panel" style="padding:0;">
+    <div class="card-header" style="padding:12px 14px 8px;">
+      <span class="card-title">📍 Sayre Hwy Intersection · Manolo Fortich</span>
+      <span style="font-size:.7rem;color:var(--muted);">Top-down · Drive with W A D / Arrow keys</span>
+    </div>
+    <div class="scene-wrap">
+      <canvas id="gameCanvas"></canvas>
+      <div class="violation-flash" id="violationFlash"></div>
+      <div class="cam-badge">● LIVE</div>
+      <div class="loc-tag">📍 Sayre Hwy Intersection</div>
+      <div class="drive-hint">
+        <span>Accel:</span><div class="key-badge">W</div><div class="key-badge">↑</div>
+        <span style="margin:0 3px;">·</span>
+        <span>Steer:</span><div class="key-badge">A</div><div class="key-badge">D</div>
       </div>
-
-      <!-- Palm trees canvas -->
-      <div id="palmLayer" style="position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden;"></div>
-
-      <!-- Shoulders -->
-      <div class="mf-shoulder-left"></div>
-      <div class="mf-shoulder-right"></div>
-
-      <!-- Road -->
-      <div class="mf-road">
-        <div class="center-line"></div>
-        <div class="lane-dash" id="laneDash1" style="top:18px;"></div>
-        <div class="lane-dash" id="laneDash2" style="top:52px;"></div>
-        <div class="zebra"></div>
-      </div>
-
-      <!-- Speed FX -->
-      <div class="speed-fx" id="sfx1" style="bottom:48px;right:100px;width:50px;"></div>
-      <div class="speed-fx" id="sfx2" style="bottom:56px;right:120px;width:35px;"></div>
-      <div class="speed-fx" id="sfx3" style="bottom:40px;right:90px; width:45px;"></div>
-
-      <!-- Vehicle lanes -->
-      <div class="car-lane"          id="carLane"></div>
-      <div class="car-lane-oncoming" id="carLaneOncoming"></div>
-
-      <!-- Location label -->
-      <div class="scene-location">📍 SAYRE HWY · MANOLO FORTICH, BUKIDNON</div>
+    </div>
+    <div class="scene-infobar">
+      <div class="info-chip">Speed: <b id="speedLabel">0 km/h</b></div>
+      <div class="speed-bar-track"><div class="speed-bar-fill" id="speedBar" style="width:0%"></div></div>
+      <div class="info-chip" style="margin-left:auto;">Status: <b id="driveStatus" style="color:var(--muted)">Stopped</b></div>
+      <div class="info-chip">Violations: <b id="violationCount" style="color:var(--red)">0</b></div>
     </div>
   </div>
 
-  <!-- RIGHT: Controls -->
-  <div class="pixel-box controls-panel">
-    <div class="panel-title">SYSTEM CONTROLS</div>
-    <div class="ctrl-body">
-      <button class="pixel-btn btn-start" onclick="sendCommand(1)"><span class="btn-icon">▶</span> START SYSTEM</button>
-      <button class="pixel-btn btn-stop"  onclick="sendCommand(0)"><span class="btn-icon">■</span> STOP SYSTEM</button>
-      <button class="pixel-btn btn-blink" onclick="sendCommand(2)"><span class="btn-icon">⚡</span> BLINK MODE</button>
+  <!-- Controls -->
+  <div class="card controls-panel">
+    <div class="card-header"><span class="card-title">System Controls</span></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:9px;">
+      <button class="ctrl-btn btn-start" onclick="sendCommand(1)"><div class="btn-icon-wrap">▶</div>Start System</button>
+      <button class="ctrl-btn btn-stop"  onclick="sendCommand(0)"><div class="btn-icon-wrap">■</div>Stop System</button>
+      <button class="ctrl-btn btn-blink" onclick="sendCommand(2)"><div class="btn-icon-wrap">⚡</div>Blink Mode</button>
       <div class="mode-indicator">
-        <div class="mode-row"><span class="mode-key">[ 0 ] OFF</span>   <span class="mode-dot" id="m0">◉</span></div>
-        <div class="mode-row"><span class="mode-key">[ 1 ] NORMAL</span><span class="mode-dot" id="m1">○</span></div>
-        <div class="mode-row"><span class="mode-key">[ 2 ] BLINK</span> <span class="mode-dot" id="m2">○</span></div>
+        <div class="mode-row"><span class="mode-label">[ 0 ]  Off</span>   <div class="mode-pip" id="m0"></div></div>
+        <div class="mode-row"><span class="mode-label">[ 1 ]  Normal</span><div class="mode-pip" id="m1"></div></div>
+        <div class="mode-row"><span class="mode-label">[ 2 ]  Blink</span> <div class="mode-pip" id="m2"></div></div>
       </div>
-      <div class="log-section">
-        <div class="log-title">📟 EVENT LOG</div>
-        <div class="log-box" id="eventLog"></div>
+      <div style="margin-top:4px;">
+        <div class="card-title" style="margin-bottom:8px;">Event Log</div>
+        <div class="log-list" id="eventLog"></div>
       </div>
     </div>
   </div>
 
-  <!-- GRAPH -->
-  <div class="pixel-box graph-panel">
-    <div class="panel-title">📊 TRAFFIC ANALYTICS</div>
+  <!-- Graph -->
+  <div class="card graph-panel">
+    <div class="card-header" style="padding-bottom:10px;"><span class="card-title">Traffic Analytics</span></div>
     <div class="graph-body">
-      <div class="chart-wrap" style="height:160px;"><canvas id="lineChart"></canvas></div>
-      <div class="chart-wrap" style="height:160px;max-width:160px;"><canvas id="donutChart"></canvas></div>
+      <div class="chart-wrap" style="height:145px;"><canvas id="lineChart"></canvas></div>
+      <div class="chart-wrap" style="height:145px;max-width:145px;"><canvas id="donutChart"></canvas></div>
     </div>
   </div>
 
-  <!-- METRICS -->
-  <div class="metrics-panel">
-    <div class="pixel-box metric-card green-card"> <div class="mc-title">GREEN PHASES</div>  <div class="mc-val" id="m-green">0</div></div>
-    <div class="pixel-box metric-card yellow-card"><div class="mc-title">YELLOW PHASES</div> <div class="mc-val" id="m-yellow">0</div></div>
-    <div class="pixel-box metric-card red-card">   <div class="mc-title">RED PHASES</div>    <div class="mc-val" id="m-red">0</div></div>
-    <div class="pixel-box metric-card blue-card">  <div class="mc-title">VEHICLES PASSED</div><div class="mc-val" id="m-vehicles">0</div></div>
-    <div class="pixel-box metric-card pink-card">  <div class="mc-title">TOTAL EVENTS</div>  <div class="mc-val" id="m-total">0</div></div>
-    <div class="pixel-box metric-card orange-card"><div class="mc-title">AVG WAIT (SEC)</div><div class="mc-val" id="m-avg">0</div></div>
+  <!-- Metrics -->
+  <div class="metrics-strip">
+    <div class="metric-card green-card"><div class="mc-label">Green Phases</div><div class="mc-value" id="m-green">0</div></div>
+    <div class="metric-card yellow-card"><div class="mc-label">Yellow Phases</div><div class="mc-value" id="m-yellow">0</div></div>
+    <div class="metric-card red-card"><div class="mc-label">Red Phases</div><div class="mc-value" id="m-red">0</div></div>
+    <div class="metric-card blue-card"><div class="mc-label">Trips Completed</div><div class="mc-value" id="m-vehicles">0</div></div>
+    <div class="metric-card indigo-card"><div class="mc-label">Total Events</div><div class="mc-value" id="m-total">0</div></div>
+    <div class="metric-card orange-card"><div class="mc-label">Violations</div><div class="mc-value" id="m-violations">0</div></div>
   </div>
 
 </main>
 
 <script>
-// ── Firebase Config (UNCHANGED) ──────────────────────
+/* ── Firebase config (unchanged) ── */
 const firebaseConfig = {
-  apiKey: "AIzaSyC6r5kNnapVhrzPQ-vA_Xm6pZRm6HQ3N7U",
-  authDomain: "traffic-sim-5a9ef.firebaseapp.com",
-  databaseURL: "https://traffic-sim-5a9ef-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "traffic-sim-5a9ef",
-  storageBucket: "traffic-sim-5a9ef.firebasestorage.app",
-  messagingSenderId: "511074874213",
-  appId: "1:511074874213:web:a6b727744263d6b9be278c"
+  apiKey:"AIzaSyC6r5kNnapVhrzPQ-vA_Xm6pZRm6HQ3N7U",
+  authDomain:"traffic-sim-5a9ef.firebaseapp.com",
+  databaseURL:"https://traffic-sim-5a9ef-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"traffic-sim-5a9ef",
+  storageBucket:"traffic-sim-5a9ef.firebasestorage.app",
+  messagingSenderId:"511074874213",
+  appId:"1:511074874213:web:a6b727744263d6b9be278c"
 };
 
-// ── State (UNCHANGED) ─────────────────────────────────
+/* ── App state ── */
 let db = null;
 let currentState = 'OFF';
 let currentMode  = 0;
 let startTime    = Date.now();
 let cycleCount   = 0;
-let score        = 0;
-let coins        = 0;
-let vehiclesPassed = 0;
+let tripsCompleted = 0;
 let totalWaitTime  = 0;
 let waitEvents     = 0;
+let violations     = 0;
 let metrics = { GREEN:0, YELLOW:0, RED:0, total:0 };
 const MAX_POINTS = 20;
 let lineData = { labels:[], green:[], yellow:[], red:[] };
 
-// ── SCENE INIT: Buildings ─────────────────────────────
-function initBuildings() {
-  const scene = document.getElementById('scene');
-  const W = scene.offsetWidth || 800;
-  const cvs = document.getElementById('buildingCanvas');
-  cvs.width  = W;
-  cvs.height = 120;
-  cvs.style.width = W + 'px';
-  const ctx = cvs.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
+/* ══════════════════════════════════
+   TOP-DOWN INTERSECTION CANVAS
+══════════════════════════════════ */
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
 
-  // LEFT SIDE — concrete commercial shops with roll-up shutters (Sayre Hwy style)
-  const leftBuildings = [
-    { x:0,   w:58, h:98,  color:'#cbc0a8', shutter:'#aaa090', sign:null,      signLabel:'' },
-    { x:58,  w:42, h:80,  color:'#b8b0a0', shutter:'#9a9288', sign:'#cc2200', signLabel:'JB' },
-    { x:100, w:52, h:112, color:'#c0b898', shutter:'#a09880', sign:'#1a4488', signLabel:'' },
-    { x:152, w:38, h:68,  color:'#c8bea8', shutter:'#a89e88', sign:null,      signLabel:'' },
-  ];
+// World constants
+const IX = 0, IY = 0;       // intersection centre in world space
+const ROAD_W = 120;          // road width (world units)
 
-  // RIGHT SIDE — shops + palm trees area
-  const rightBuildings = [
-    { x:W-52,  w:52, h:88,  color:'#bbb0a0', shutter:'#9a9088', sign:'#006633', signLabel:'' },
-    { x:W-102, w:50, h:102, color:'#c4baa8', shutter:'#a49888', sign:null,      signLabel:'' },
-    { x:W-155, w:53, h:75,  color:'#b8b0a0', shutter:'#989080', sign:'#cc6600', signLabel:'' },
-    { x:W-205, w:50, h:92,  color:'#c0b898', shutter:'#a09880', sign:null,      signLabel:'' },
-  ];
+// Player car
+const car = {
+  x: 0, y: 420,            // start south of intersection
+  angle: -Math.PI / 2,     // facing north
+  speed: 0,
+  maxSpeed: 5,
+  accel: 0.13,
+  brakeForce: 0.22,
+  friction: 0.045,
+  turnRate: 0.034,
+  w: 28, h: 50,
+  color: '#2563eb',
+  roofColor: '#1d4ed8',
+};
 
-  function drawBuilding(b) {
-    const yBase = 120;
-    // Wall
-    ctx.fillStyle = b.color;
-    ctx.fillRect(b.x, yBase - b.h, b.w, b.h);
-    // Side shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.fillRect(b.x + b.w - 4, yBase - b.h, 4, b.h);
-    ctx.fillRect(b.x, yBase - b.h, 3, b.h);
-    // Parapet
-    ctx.fillStyle = '#887060';
-    ctx.fillRect(b.x - 2, yBase - b.h - 7, b.w + 4, 7);
-    // Sign board
-    if (b.sign) {
-      ctx.fillStyle = b.sign;
-      ctx.fillRect(b.x + 4, yBase - b.h + 8, b.w - 8, 16);
-      ctx.fillStyle = '#ffeecc';
-      ctx.font = '5px monospace';
-      ctx.fillText(b.signLabel, b.x + 8, yBase - b.h + 20);
-    }
-    // Roll-up shutter
-    ctx.fillStyle = b.shutter;
-    ctx.fillRect(b.x + 5, yBase - 32, b.w - 10, 30);
-    // Shutter slats
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-    ctx.lineWidth = 1;
-    for (let sy = yBase - 32; sy < yBase - 3; sy += 5) {
-      ctx.beginPath(); ctx.moveTo(b.x+5,sy); ctx.lineTo(b.x+b.w-5,sy); ctx.stroke();
-    }
-    // Vertical shutter handle
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(b.x + b.w/2, yBase - 32);
-    ctx.lineTo(b.x + b.w/2, yBase - 4);
-    ctx.stroke();
-    // Window if tall enough
-    if (b.h > 70) {
-      ctx.fillStyle = 'rgba(160,210,240,0.55)';
-      ctx.fillRect(b.x + 7, yBase - b.h + 30, 11, 9);
-      if (b.w > 44) ctx.fillRect(b.x + b.w - 18, yBase - b.h + 30, 11, 9);
+// Camera (tracks car)
+let camX = car.x, camY = car.y;
+let zoom  = 1.0;
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true;  e.preventDefault && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key) && e.preventDefault(); });
+window.addEventListener('keyup',   e => { keys[e.key] = false; });
+
+// Violation state
+let violationCooldown = 0;
+let flashTimer = null;
+
+// Stop line: cars approaching from south stop just before south edge of intersection
+const STOP_Y = IY + ROAD_W / 2 + 14;  // just south of intersection box
+
+function resizeCanvas() {
+  const wrap = canvas.parentElement;
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  zoom = Math.min(canvas.width, canvas.height) / 400;
+}
+
+/* ── world → screen ── */
+function ws(wx, wy) {
+  return {
+    sx: (wx - camX) * zoom + canvas.width  / 2,
+    sy: (wy - camY) * zoom + canvas.height / 2,
+  };
+}
+
+/* ── DRAW ROAD ── */
+function drawWorld() {
+  const W = canvas.width, H = canvas.height;
+  const z = zoom;
+
+  // ── Grass background
+  const grassGrad = ctx.createLinearGradient(0, 0, W, H);
+  grassGrad.addColorStop(0, '#4a9e4a');
+  grassGrad.addColorStop(1, '#3a7e3a');
+  ctx.fillStyle = grassGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Small grass texture
+  ctx.fillStyle = 'rgba(0,0,0,0.055)';
+  for (let gx = -600; gx < 600; gx += 44) {
+    for (let gy = -600; gy < 600; gy += 44) {
+      const inRoad = (Math.abs(gx - IX) < ROAD_W/2 + 5) || (Math.abs(gy - IY) < ROAD_W/2 + 5);
+      if (!inRoad) {
+        const s = ws(gx, gy);
+        ctx.fillRect(s.sx, s.sy, 2, 2);
+      }
     }
   }
 
-  leftBuildings.forEach(drawBuilding);
-  rightBuildings.forEach(drawBuilding);
+  // ── Road surfaces
+  // Vertical road (N-S)
+  const vRoadTL = ws(IX - ROAD_W/2, -800);
+  ctx.fillStyle = '#6b6b6b';
+  ctx.fillRect(vRoadTL.sx, vRoadTL.sy, ROAD_W*z, 1600*z);
 
-  // Concrete ground strip at bottom
-  ctx.fillStyle = '#b8a888';
-  ctx.fillRect(0, 116, W, 4);
-}
+  // Horizontal road (E-W)
+  const hRoadTL = ws(-800, IY - ROAD_W/2);
+  ctx.fillRect(hRoadTL.sx, hRoadTL.sy, 1600*z, ROAD_W*z);
 
-// ── SCENE INIT: Overhead traffic light arm ────────────
-function initOverheadArm() {
-  const scene = document.getElementById('scene');
-  const W = scene.offsetWidth || 800;
-  const H = 300;
+  // Intersection box (slightly lighter)
+  const intTL = ws(IX - ROAD_W/2, IY - ROAD_W/2);
+  ctx.fillStyle = '#787878';
+  ctx.fillRect(intTL.sx, intTL.sy, ROAD_W*z, ROAD_W*z);
 
-  const poleX  = Math.round(W * 0.13);
-  const poleH  = 88;
-  const armLen = Math.round(W * 0.36);
+  // ── Road edge lines (white)
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 2.5 * z;
+  ctx.setLineDash([]);
 
-  const pole = document.getElementById('armPole');
-  pole.style.cssText = `left:${poleX}px;bottom:68px;height:${poleH}px;position:absolute;width:6px;background:#666;border:1px solid #888;z-index:12;`;
-
-  // Curve the arm up slightly — use a short vertical section + horizontal
-  const armEl = document.getElementById('armH');
-  armEl.style.cssText = `left:${poleX+3}px;width:${armLen}px;bottom:${68+poleH-5}px;position:absolute;height:5px;background:#666;border:1px solid #888;z-index:12;`;
-
-  const box = document.getElementById('armTlBox');
-  box.style.cssText = `left:${poleX+armLen-10}px;bottom:${68+poleH}px;position:absolute;width:20px;background:#111;border:2px solid #555;box-shadow:2px 2px 0 #000;z-index:13;padding:3px 2px;display:flex;flex-direction:column;gap:2px;align-items:center;`;
-  // Drop cable
-  box.style.setProperty('--cable-h','8px');
-  box.innerHTML = `
-    <div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:2px;height:8px;background:#666;"></div>
-    <div class="asbulb r" id="asb-r"></div>
-    <div class="asbulb y" id="asb-y"></div>
-    <div class="asbulb g" id="asb-g"></div>
-  `;
-
-  // Second smaller pole right side
-  const poleLayer = document.getElementById('poleLayer');
-  const poleData = [
-    { x: Math.round(W*0.07), h:105 },
-    { x: Math.round(W*0.53), h:98  },
-    { x: Math.round(W*0.78), h:106 },
-    { x: Math.round(W*0.92), h:92  },
-  ];
-
-  poleData.forEach(p => {
-    const pd = document.createElement('div');
-    pd.style.cssText = `position:absolute;bottom:68px;left:${p.x}px;width:5px;height:${p.h}px;background:#555;border-left:1px solid #666;z-index:8;`;
-    const crossArm = document.createElement('div');
-    crossArm.style.cssText = `position:absolute;top:10px;left:-14px;width:33px;height:3px;background:#555;`;
-    pd.appendChild(crossArm);
-    poleLayer.appendChild(pd);
+  // Vertical road edges
+  [[IX - ROAD_W/2, -800, IX - ROAD_W/2, IY - ROAD_W/2],
+   [IX + ROAD_W/2, -800, IX + ROAD_W/2, IY - ROAD_W/2],
+   [IX - ROAD_W/2, IY + ROAD_W/2, IX - ROAD_W/2, 800],
+   [IX + ROAD_W/2, IY + ROAD_W/2, IX + ROAD_W/2, 800],
+  ].forEach(([x1,y1,x2,y2]) => {
+    const a = ws(x1,y1), b = ws(x2,y2);
+    ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();
   });
 
-  // SVG wires
-  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svg.setAttribute('style','position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:7;overflow:visible;');
-  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-
-  const allPoles = [
-    { x:poleX,              y: H - 68 - poleH + 14 },
-    ...poleData.map(p => ({ x:p.x, y: H - 68 - p.h + 14 }))
-  ].sort((a,b) => a.x - b.x);
-
-  const wireOffsets = [0, 7, 14];
-  const wireColors  = ['#252525','#2f2f2f','#1a1a1a'];
-
-  wireOffsets.forEach((off, wi) => {
-    for (let i = 0; i < allPoles.length - 1; i++) {
-      const p1 = allPoles[i];
-      const p2 = allPoles[i+1];
-      const mx = (p1.x + p2.x) / 2;
-      const my = Math.max(p1.y, p2.y) + off + 10;
-      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-      path.setAttribute('d',`M ${p1.x+2} ${p1.y+off} Q ${mx} ${my} ${p2.x+2} ${p2.y+off}`);
-      path.setAttribute('stroke', wireColors[wi]);
-      path.setAttribute('stroke-width','1.5');
-      path.setAttribute('fill','none');
-      svg.appendChild(path);
-    }
-  });
-  poleLayer.appendChild(svg);
-}
-
-// ── SCENE INIT: Palm trees (right side) ──────────────
-function initPalmTrees() {
-  const scene = document.getElementById('scene');
-  const W = scene.offsetWidth || 800;
-  const layer = document.getElementById('palmLayer');
-
-  const palms = [
-    { x: W - 38,  h: 82, lean: -6 },
-    { x: W - 88,  h: 96, lean: -5 },
-    { x: W - 140, h: 72, lean: -4 },
-  ];
-
-  palms.forEach(p => {
-    const cvs = document.createElement('canvas');
-    const cw = 50, ch = p.h + 24;
-    cvs.width  = cw;
-    cvs.height = ch;
-    cvs.style.cssText = `position:absolute;bottom:68px;left:${p.x - 20}px;image-rendering:pixelated;z-index:6;`;
-    drawPalm(cvs.getContext('2d'), cw, ch, p.h, p.lean);
-    layer.appendChild(cvs);
+  // Horizontal road edges
+  [[-800, IY - ROAD_W/2, IX - ROAD_W/2, IY - ROAD_W/2],
+   [-800, IY + ROAD_W/2, IX - ROAD_W/2, IY + ROAD_W/2],
+   [IX + ROAD_W/2, IY - ROAD_W/2, 800, IY - ROAD_W/2],
+   [IX + ROAD_W/2, IY + ROAD_W/2, 800, IY + ROAD_W/2],
+  ].forEach(([x1,y1,x2,y2]) => {
+    const a = ws(x1,y1), b = ws(x2,y2);
+    ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();
   });
 
-  // Also a tropical leafy tree left mid
-  const tc = document.createElement('canvas');
-  tc.width = 40; tc.height = 70;
-  tc.style.cssText = `position:absolute;bottom:68px;left:${Math.round(W*0.04)}px;image-rendering:pixelated;z-index:4;`;
-  drawTropicalTree(tc.getContext('2d'), 40, 70);
-  layer.appendChild(tc);
-}
+  // ── Centre dashes (yellow)
+  ctx.strokeStyle = '#facc15';
+  ctx.lineWidth = 2 * z;
+  ctx.setLineDash([20*z, 16*z]);
 
-function drawPalm(ctx, W, H, h, lean) {
-  ctx.imageSmoothingEnabled = false;
-  const tx = W / 2;
-  // Trunk
-  ctx.strokeStyle = '#7a5c2a';
-  ctx.lineWidth = 6;
+  // Vertical centre
+  [[IX, -800, IX, IY - ROAD_W/2],
+   [IX, IY + ROAD_W/2, IX, 800]].forEach(([x1,y1,x2,y2]) => {
+    const a = ws(x1,y1), b = ws(x2,y2);
+    ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();
+  });
+
+  // Horizontal centre
+  [[-800, IY, IX - ROAD_W/2, IY],
+   [IX + ROAD_W/2, IY, 800, IY]].forEach(([x1,y1,x2,y2]) => {
+    const a = ws(x1,y1), b = ws(x2,y2);
+    ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // ── Crosswalks (all 4 sides)
+  const cwSize = 20, cwStripes = 5, cwGap = 5;
+  const cwSpan = cwStripes * cwSize + (cwStripes-1) * cwGap;
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+
+  // South crosswalk (player side)
+  for (let i = 0; i < cwStripes; i++) {
+    const off = -cwSpan/2 + i*(cwSize+cwGap);
+    const s = ws(IX + off, IY + ROAD_W/2);
+    ctx.fillRect(s.sx, s.sy, cwSize*z, 22*z);
+  }
+  // North crosswalk
+  for (let i = 0; i < cwStripes; i++) {
+    const off = -cwSpan/2 + i*(cwSize+cwGap);
+    const s = ws(IX + off, IY - ROAD_W/2 - 22);
+    ctx.fillRect(s.sx, s.sy, cwSize*z, 22*z);
+  }
+  // West crosswalk
+  for (let i = 0; i < cwStripes; i++) {
+    const off = -cwSpan/2 + i*(cwSize+cwGap);
+    const s = ws(IX - ROAD_W/2 - 22, IY + off);
+    ctx.fillRect(s.sx, s.sy, 22*z, cwSize*z);
+  }
+  // East crosswalk
+  for (let i = 0; i < cwStripes; i++) {
+    const off = -cwSpan/2 + i*(cwSize+cwGap);
+    const s = ws(IX + ROAD_W/2, IY + off);
+    ctx.fillRect(s.sx, s.sy, 22*z, cwSize*z);
+  }
+
+  // ── STOP LINE — south approach, left lane (player's lane going north)
+  const slStart = ws(IX - ROAD_W/2, STOP_Y);
+  const slEnd   = ws(IX, STOP_Y);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth   = 5 * z;
   ctx.beginPath();
-  ctx.moveTo(tx, H);
-  ctx.quadraticCurveTo(tx + lean * 0.5, H * 0.5, tx + lean, H - h);
+  ctx.moveTo(slStart.sx, slStart.sy);
+  ctx.lineTo(slEnd.sx,   slEnd.sy);
   ctx.stroke();
-  // Trunk rings
-  ctx.strokeStyle = '#5a4020';
-  ctx.lineWidth = 1;
-  const steps = Math.floor(h / 9);
-  for (let i = 0; i < steps; i++) {
-    const t = i / steps;
-    const rx = tx + lean * t;
-    const ry = H - h * t;
-    ctx.beginPath(); ctx.moveTo(rx - 3, ry); ctx.lineTo(rx + 3, ry); ctx.stroke();
-  }
-  // Fronds
-  const topX = tx + lean, topY = H - h;
-  const frondData = [
-    { dx:-22, dy:-4,  c:'#2d7a1a' },
-    { dx: 20, dy:-2,  c:'#3a9a22' },
-    { dx:-16, dy:-16, c:'#1a5a10' },
-    { dx: 16, dy:-14, c:'#4ab030' },
-    { dx:-8,  dy:-22, c:'#2d7a1a' },
-    { dx: 7,  dy:-20, c:'#3a9a22' },
-    { dx:-2,  dy:-24, c:'#246018' },
-  ];
-  frondData.forEach(f => {
-    ctx.strokeStyle = f.c;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(topX, topY);
-    ctx.quadraticCurveTo(topX + f.dx*0.5, topY + f.dy*0.5 + 5, topX + f.dx, topY + f.dy);
-    ctx.stroke();
-    // Leaf veins
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = '#1a5010';
-    for (let t = 0.4; t <= 1; t += 0.25) {
-      const lx = topX + f.dx * t, ly = topY + f.dy * t;
-      ctx.beginPath(); ctx.moveTo(lx-3,ly-2); ctx.lineTo(lx+3,ly+2); ctx.stroke();
-    }
-  });
-  // Coconuts
-  ctx.fillStyle = '#8b6914';
-  ctx.fillRect(topX-3, topY+2, 5, 5);
-  ctx.fillStyle = '#a07820';
-  ctx.fillRect(topX+3, topY+4, 4, 4);
+
+  // ── STOP text
+  ctx.save();
+  const stxt = ws(IX - ROAD_W/4, STOP_Y + 10);
+  ctx.translate(stxt.sx, stxt.sy);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = `bold ${Math.round(9*z)}px DM Sans, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('STOP', 0, 0);
+  ctx.restore();
 }
 
-function drawTropicalTree(ctx, W, H) {
-  ctx.imageSmoothingEnabled = false;
-  // Simple trunk
-  ctx.fillStyle = '#5a4020';
-  ctx.fillRect(W/2-3, H*0.5, 6, H*0.5);
-  // Canopy layers
-  const cols = ['#1e7a10','#2a9a18','#158008','#35b020'];
-  [16,22,18,14].forEach((r,i) => {
-    const cy = H * 0.5 - i * 10;
+/* ── TRAFFIC LIGHT POLE (SE corner of intersection) ── */
+function drawTrafficLight() {
+  const z = zoom;
+  // Pole sits SE corner, arm extends west over south approach lane
+  const poleWX = IX + ROAD_W/2 + 12;
+  const poleWY = IY + ROAD_W/2 + 12;
+  const p = ws(poleWX, poleWY);
+
+  // Base plate
+  ctx.fillStyle = '#374151';
+  ctx.beginPath(); ctx.roundRect(p.sx - 5*z, p.sy - 5*z, 10*z, 10*z, 2*z); ctx.fill();
+
+  // Vertical shaft
+  const shaftH = 44*z;
+  ctx.fillStyle = '#4b5563';
+  ctx.fillRect(p.sx - 3*z, p.sy - shaftH, 6*z, shaftH);
+
+  // Horizontal arm going west (over road)
+  const armLen = 42*z;
+  ctx.fillStyle = '#4b5563';
+  ctx.fillRect(p.sx - armLen - 3*z, p.sy - shaftH + 2*z, armLen, 4*z);
+
+  // Housing box (hangs from end of arm)
+  const hx = p.sx - armLen - 3*z - 2*z;
+  const hy = p.sy - shaftH - 2*z;
+  const hw = 16*z, hh = 42*z;
+
+  // Drop cable
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(hx + hw/2 - 1.5*z, p.sy - shaftH + 6*z, 3*z, hy - (p.sy - shaftH + 6*z));
+
+  ctx.fillStyle = '#1f2937';
+  ctx.beginPath(); ctx.roundRect(hx, hy, hw, hh, 3*z); ctx.fill();
+  ctx.strokeStyle = '#374151'; ctx.lineWidth = 1.5*z; ctx.stroke();
+
+  // Bulb colours based on state
+  const blinkOff = currentState === 'BLINK' && Math.floor(Date.now() / 380) % 2 === 0;
+  const COLS = {
+    OFF:    ['#330000','#221100','#001100'],
+    RED:    ['#ef4444','#221100','#001100'],
+    YELLOW: ['#330000','#f59e0b','#001100'],
+    GREEN:  ['#330000','#221100','#22c55e'],
+    BLINK:  ['#ef4444','#f59e0b','#22c55e'],
+  };
+  const GLOWS = {
+    RED:    ['rgba(239,68,68,.9)',null,null],
+    YELLOW: [null,'rgba(245,158,11,.9)',null],
+    GREEN:  [null,null,'rgba(34,197,94,.9)'],
+    BLINK:  ['rgba(239,68,68,.6)','rgba(245,158,11,.6)','rgba(34,197,94,.6)'],
+    OFF:    [null,null,null],
+  };
+  const cols = blinkOff ? COLS.OFF  : (COLS[currentState]  || COLS.OFF);
+  const gls  = blinkOff ? GLOWS.OFF : (GLOWS[currentState] || GLOWS.OFF);
+
+  const bR = 4.5 * z;
+  const bPositions = [hy + 8*z, hy + 21*z, hy + 34*z];
+
+  bPositions.forEach((by, i) => {
+    const bx = hx + hw/2;
+    if (gls[i]) { ctx.shadowColor = gls[i]; ctx.shadowBlur = 16*z; }
     ctx.fillStyle = cols[i];
-    ctx.fillRect(W/2-r, cy, r*2, r);
+    ctx.beginPath(); ctx.arc(bx, by, bR, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    if (!['#330000','#221100','#001100'].includes(cols[i])) {
+      ctx.fillStyle = 'rgba(255,255,255,.32)';
+      ctx.beginPath(); ctx.arc(bx - bR*.28, by - bR*.28, bR*.3, 0, Math.PI*2); ctx.fill();
+    }
   });
+
+  // State label above housing
+  const stateColor = { GREEN:'#22c55e', RED:'#ef4444', YELLOW:'#f59e0b', BLINK:'#f59e0b', OFF:'rgba(255,255,255,.4)' };
+  ctx.fillStyle = stateColor[currentState] || 'rgba(255,255,255,.4)';
+  ctx.font = `600 ${Math.round(8*z)}px DM Sans, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(currentState === 'OFF' ? 'OFFLINE' : currentState, hx + hw/2, hy - 5*z);
+  ctx.textAlign = 'left';
 }
 
-// ── VEHICLES ─────────────────────────────────────────
-const VEHICLE_TYPES = [
-  { type:'car',   cls:'car-blue',   w:36, stopOffset:110 },
-  { type:'car',   cls:'car-red',    w:36, stopOffset:110 },
-  { type:'car',   cls:'car-white',  w:36, stopOffset:110 },
-  { type:'car',   cls:'car-silver', w:36, stopOffset:110 },
-  { type:'car',   cls:'car-green',  w:36, stopOffset:110 },
-  { type:'trike', cls:'',           w:30, stopOffset:100 },
-  { type:'trike', cls:'',           w:30, stopOffset:100 },
-  { type:'jeep',  cls:'',           w:54, stopOffset:130 },
-  { type:'truck', cls:'',           w:56, stopOffset:140 },
-];
+/* ── PLAYER CAR ── */
+function drawCar() {
+  const s = ws(car.x, car.y);
+  const z = zoom;
 
-let vehicles = [];
-let nextSpawn = 1500;
-let lastSpawn = 0;
+  ctx.save();
+  ctx.translate(s.sx, s.sy);
+  ctx.rotate(car.angle + Math.PI / 2); // +90° because car sprite faces up
 
-function spawnVehicle(laneDir) {
-  const dir = laneDir || (Math.random() > 0.5 ? 'normal' : 'oncoming');
-  const lane = document.getElementById(dir === 'normal' ? 'carLane' : 'carLaneOncoming');
-  const scene = document.getElementById('scene');
-  const W = scene.offsetWidth || 800;
-  const vt = VEHICLE_TYPES[Math.floor(Math.random() * VEHICLE_TYPES.length)];
-  const speed = 1.5 + Math.random() * 1.5;
-  const goRight = dir === 'normal';
-  const startX = goRight ? -(vt.w + 20) : W + 10;
+  const cw = car.w * z, ch = car.h * z;
 
-  let el;
-  if (vt.type === 'trike') {
-    el = document.createElement('div');
-    el.className = 'ptrike';
-    el.innerHTML = `<div class="t-sidecar"></div><div class="t-moto"></div><div class="t-roof"></div><div class="t-ws"></div><div class="t-wf"></div><div class="t-light"></div>`;
-  } else if (vt.type === 'jeep') {
-    el = document.createElement('div');
-    el.className = 'pjeep';
-    el.innerHTML = `<div class="j-body"></div><div class="j-top"></div><div class="j-grill"></div><div class="j-decor"></div><div class="j-wr"></div><div class="j-wf"></div><div class="j-light"></div>`;
-  } else if (vt.type === 'truck') {
-    el = document.createElement('div');
-    el.className = 'ptruck';
-    el.innerHTML = `<div class="truck-body"></div><div class="truck-cab"></div><div class="truck-wheel-r"></div><div class="truck-wheel-f"></div><div class="truck-headlight"></div>`;
-  } else {
-    el = document.createElement('div');
-    el.className = `pcar ${vt.cls}`;
-    el.innerHTML = `<div class="wheel-r"></div><div class="wheel-f"></div><div class="roof"></div><div class="body"></div><div class="headlight"></div><div class="taillight"></div>`;
-  }
+  // Drop shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(3*z, 4*z, cw*.42, ch*.32, 0, 0, Math.PI*2);
+  ctx.fill();
 
-  if (!goRight) el.style.transform = 'scaleX(-1)';
-  el.style.left = startX + 'px';
-  lane.appendChild(el);
-  vehicles.push({ el, x:startX, speed, w:vt.w, stopOffset:vt.stopOffset, type:vt.type, dir, goRight });
+  // Body
+  ctx.fillStyle = car.color;
+  ctx.beginPath(); ctx.roundRect(-cw/2, -ch/2, cw, ch, 5*z); ctx.fill();
+
+  // Roof
+  ctx.fillStyle = car.roofColor;
+  ctx.beginPath(); ctx.roundRect(-cw*.32, -ch*.28, cw*.64, ch*.42, 3*z); ctx.fill();
+
+  // Windshield
+  ctx.fillStyle = 'rgba(186,228,255,.6)';
+  ctx.beginPath(); ctx.roundRect(-cw*.26, -ch*.26, cw*.52, ch*.18, 2*z); ctx.fill();
+
+  // Rear window
+  ctx.fillStyle = 'rgba(186,228,255,.45)';
+  ctx.beginPath(); ctx.roundRect(-cw*.22, ch*.1, cw*.44, ch*.14, 2*z); ctx.fill();
+
+  // Headlights (front)
+  ctx.fillStyle = '#fefce8';
+  ctx.shadowColor = 'rgba(255,245,150,.85)';
+  ctx.shadowBlur = 7*z;
+  ctx.fillRect(-cw*.4, -ch*.47, cw*.2, ch*.09);
+  ctx.fillRect( cw*.2, -ch*.47, cw*.2, ch*.09);
+  ctx.shadowBlur = 0;
+
+  // Tail lights
+  const braking = car.speed < 0.5 && (keys['s']||keys['S']||keys['ArrowDown']);
+  ctx.fillStyle = braking ? '#ef4444' : '#991b1b';
+  if (braking) { ctx.shadowColor = 'rgba(239,68,68,.65)'; ctx.shadowBlur = 7*z; }
+  ctx.fillRect(-cw*.4,  ch*.38, cw*.2, ch*.09);
+  ctx.fillRect( cw*.2,  ch*.38, cw*.2, ch*.09);
+  ctx.shadowBlur = 0;
+
+  // Wheels (4 corners)
+  const ww = cw*.22, wh = ch*.2;
+  [[-cw*.42,-ch*.34],[cw*.2,-ch*.34],[-cw*.42,ch*.14],[cw*.2,ch*.14]].forEach(([wx,wy]) => {
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.roundRect(wx,wy,ww,wh,2*z); ctx.fill();
+    ctx.fillStyle = '#555';
+    ctx.beginPath(); ctx.arc(wx+ww/2, wy+wh/2, ww*.28, 0, Math.PI*2); ctx.fill();
+  });
+
+  ctx.restore();
 }
 
-function updateVehicles(dt) {
-  const scene = document.getElementById('scene');
-  const W = (scene && scene.offsetWidth) || 800;
-  const stopLine = W - 150;
-  const isGo   = currentState === 'GREEN';
-  const isSlow = currentState === 'YELLOW';
+/* ── UPDATE CAR PHYSICS ── */
+function updateCar() {
+  const accelKey = keys['w']||keys['W']||keys['ArrowUp'];
+  const brakeKey = keys['s']||keys['S']||keys['ArrowDown'];
+  const leftKey  = keys['a']||keys['A']||keys['ArrowLeft'];
+  const rightKey = keys['d']||keys['D']||keys['ArrowRight'];
 
-  for (let i = vehicles.length - 1; i >= 0; i--) {
-    const v = vehicles[i];
-    let spd;
-    if (v.dir === 'oncoming') {
-      spd = v.speed;
-      for (let j = 0; j < vehicles.length; j++) {
-        if (j !== i && vehicles[j].dir === 'oncoming') {
-          const gap = v.x - vehicles[j].x;
-          if (gap > 0 && gap < v.w + 12) { spd = Math.min(spd, vehicles[j].speed * 0.5); if (gap < v.w+6) spd=0; }
-        }
+  // Determine speed cap from traffic state
+  const isGreen  = currentState === 'GREEN';
+  const isYellow = currentState === 'YELLOW';
+  const isRed    = currentState === 'RED';
+  const isOff    = currentState === 'OFF';
+  const isBlink  = currentState === 'BLINK';
+
+  // Is the car in the south approach lane and heading north toward the stop line?
+  const headingNorth   = car.angle > -Math.PI * 0.9 && car.angle < -Math.PI * 0.1;
+  const southApproach  = car.y > IY && car.y < STOP_Y + 40;
+  const atStopZone     = car.y > STOP_Y - 5 && car.y < STOP_Y + 50;
+  const mustHalt       = (isRed || isOff) && headingNorth && southApproach;
+
+  // Max speed based on state
+  let stateMax = isGreen ? car.maxSpeed : isYellow ? car.maxSpeed * 0.42 : isBlink ? car.maxSpeed * 0.28 : 0;
+
+  if (accelKey) {
+    if (mustHalt && car.y <= STOP_Y + 2) {
+      // At or past stop line on red — block and flag violation
+      car.speed = 0;
+      car.y = Math.max(car.y, STOP_Y + 2);
+      if (violationCooldown <= 0) {
+        violations++;
+        document.getElementById('violationCount').textContent = violations;
+        document.getElementById('m-violations').textContent   = violations;
+        violationCooldown = 150;
+        const fl = document.getElementById('violationFlash');
+        fl.classList.add('on');
+        clearTimeout(flashTimer);
+        flashTimer = setTimeout(() => fl.classList.remove('on'), 550);
+        addLog('Red light violation!', 'red');
       }
-      v.x -= spd;
     } else {
-      spd = isGo ? v.speed : isSlow ? v.speed * 0.35 : 0;
-      for (let j = 0; j < vehicles.length; j++) {
-        if (j !== i && vehicles[j].dir === 'normal') {
-          const gap = vehicles[j].x - v.x;
-          if (gap > 0 && gap < v.w + 12) { spd = Math.min(spd, vehicles[j].speed * 0.5); if (gap < v.w+6) spd=0; }
-        }
-      }
-      const maxX = isGo ? W + 80 : stopLine - v.stopOffset;
-      v.x = Math.min(v.x + spd, maxX);
+      car.speed = Math.min(car.speed + car.accel, stateMax);
     }
-    v.el.style.left = v.x + 'px';
-
-    // Wheel spin
-    const wEls = v.el.querySelectorAll('[class*="wheel"],[class*="t-w"],[class*="j-w"]');
-    wEls.forEach(w => {
-      w.className = w.className.replace(' wheel-spin','').replace(' wheel-slow','');
-      if (spd > 1) w.className += ' wheel-spin';
-      else if (spd > 0) w.className += ' wheel-slow';
-    });
-
-    // Brake lights
-    const tail = v.el.querySelector('.taillight');
-    if (tail) tail.classList.toggle('brake', spd < 0.5 && v.dir === 'normal' && v.x > 50);
-
-    // Remove when off screen
-    const offRight = v.goRight  && v.x > W + v.w + 20;
-    const offLeft  = !v.goRight && v.x < -v.w - 20;
-    if (offRight || offLeft) {
-      vehiclesPassed++;
-      score += 100;
-      coins += 1;
-      document.getElementById('m-vehicles').textContent = vehiclesPassed;
-      document.getElementById('coinVal').textContent = String(coins).padStart(2,'0');
-      updateScore();
-      showScorePopup('+100');
-      v.el.remove();
-      vehicles.splice(i, 1);
-    }
+  } else if (brakeKey) {
+    car.speed = Math.max(car.speed - car.brakeForce, 0);
+  } else {
+    // Natural yellow/red deceleration when near stop zone
+    const autoSlow = (isYellow || (mustHalt && atStopZone));
+    car.speed = Math.max(car.speed - (autoSlow ? car.friction * 2.5 : car.friction), 0);
   }
 
-  // Spawn
-  const nc = vehicles.filter(v=>v.dir==='normal').length;
-  const oc = vehicles.filter(v=>v.dir==='oncoming').length;
-  if (Date.now() - lastSpawn > nextSpawn) {
-    lastSpawn = Date.now();
-    nextSpawn = 700 + Math.random() * 1000;
-    if (currentMode !== 0) {
-      if (nc < 5) spawnVehicle('normal');
-      if (oc < 5) spawnVehicle('oncoming');
-    }
+  // Steering (scales with speed)
+  if (car.speed > 0.1) {
+    const turn = car.turnRate * (car.speed / car.maxSpeed);
+    if (leftKey)  car.angle -= turn;
+    if (rightKey) car.angle += turn;
   }
 
-  ['sfx1','sfx2','sfx3'].forEach(id => {
-    document.getElementById(id)?.classList.toggle('show', isGo);
-  });
+  // Move
+  car.x += Math.cos(car.angle) * car.speed;
+  car.y += Math.sin(car.angle) * car.speed;
+
+  // Soft world wrap (so you can drive around freely)
+  const LIMIT = 560;
+  if (car.y < IY - LIMIT) { car.y = IY + LIMIT; }
+  if (car.y > IY + LIMIT) { car.y = IY - LIMIT; tripsCompleted++; document.getElementById('m-vehicles').textContent = tripsCompleted; }
+  if (car.x < IX - LIMIT) { car.x = IX + LIMIT; }
+  if (car.x > IX + LIMIT) { car.x = IX - LIMIT; }
+
+  if (violationCooldown > 0) violationCooldown--;
+
+  // Smooth camera follow
+  camX += (car.x - camX) * 0.1;
+  camY += (car.y - camY) * 0.1;
+
+  // Update HUD
+  const kmh = Math.round(car.speed / car.maxSpeed * 65);
+  document.getElementById('speedLabel').textContent = kmh + ' km/h';
+  document.getElementById('speedBar').style.width      = (car.speed / car.maxSpeed * 100) + '%';
+  document.getElementById('speedBar').style.background = mustHalt ? '#ef4444' : isYellow ? '#f59e0b' : '#22c55e';
+
+  const ds = document.getElementById('driveStatus');
+  if (mustHalt && car.speed < 0.1)  { ds.textContent = '🔴 Stopped at Red'; ds.style.color = 'var(--red)'; }
+  else if (isYellow && car.speed>0) { ds.textContent = '🟡 Slowing'; ds.style.color = 'var(--yellow-dark)'; }
+  else if (isGreen && car.speed>0)  { ds.textContent = '🟢 Moving';  ds.style.color = 'var(--green-dark)'; }
+  else if (car.speed < 0.05)        { ds.textContent = 'Stopped'; ds.style.color = 'var(--muted)'; }
+  else                              { ds.textContent = 'Coasting'; ds.style.color = 'var(--muted)'; }
 }
 
-function showScorePopup(text) {
-  const scene = document.getElementById('scene');
-  const p = document.createElement('div');
-  p.className = 'score-popup';
-  p.textContent = text;
-  p.style.left = (scene.offsetWidth - 160) + 'px';
-  p.style.top  = '20px';
-  scene.appendChild(p);
-  setTimeout(() => p.remove(), 1200);
+/* ── GAME LOOP ── */
+function gameLoop() {
+  resizeCanvas();
+  zoom = Math.min(canvas.width, canvas.height) / 400;
+  updateCar();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawTrafficLight();
+  drawCar();
+  requestAnimationFrame(gameLoop);
 }
 
-// ── Lane dashes ───────────────────────────────────────
-function updateLaneDashes(state) {
-  ['laneDash1','laneDash2'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.className = 'lane-dash';
-    if (state === 'GREEN')       el.classList.add('moving');
-    else if (state === 'YELLOW') el.classList.add('slow');
-    // stopped = no animation class
-  });
-}
-
-// ── Charts (UNCHANGED) ────────────────────────────────
+/* ══════════════════════════════════
+   CHARTS
+══════════════════════════════════ */
 let lineChart, donutChart;
 function initCharts() {
-  Chart.defaults.color = '#555588';
-  Chart.defaults.borderColor = '#1a1a3a';
-  Chart.defaults.font.family = "'VT323', monospace";
+  Chart.defaults.color = '#9ca3af';
+  Chart.defaults.borderColor = '#e5e7eb';
+  Chart.defaults.font.family = "'DM Sans',sans-serif";
+  Chart.defaults.font.size = 11;
+
   const lCtx = document.getElementById('lineChart').getContext('2d');
   lineChart = new Chart(lCtx, {
     type:'line',
     data:{ labels:lineData.labels, datasets:[
-      { label:'GREEN',  data:lineData.green,  borderColor:'#00ff44', backgroundColor:'rgba(0,255,68,0.08)',  tension:0, stepped:true, pointRadius:3, pointStyle:'rect' },
-      { label:'YELLOW', data:lineData.yellow, borderColor:'#ffff00', backgroundColor:'rgba(255,255,0,0.06)', tension:0, stepped:true, pointRadius:3, pointStyle:'rect' },
-      { label:'RED',    data:lineData.red,    borderColor:'#ff3333', backgroundColor:'rgba(255,51,51,0.06)', tension:0, stepped:true, pointRadius:3, pointStyle:'rect' },
+      { label:'Green',  data:lineData.green,  borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.08)',  tension:.3, pointRadius:2, borderWidth:2 },
+      { label:'Yellow', data:lineData.yellow, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.08)', tension:.3, pointRadius:2, borderWidth:2 },
+      { label:'Red',    data:lineData.red,    borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)',  tension:.3, pointRadius:2, borderWidth:2 },
     ]},
     options:{ responsive:true, maintainAspectRatio:false, animation:false,
-      plugins:{ legend:{ labels:{ font:{ family:"'Press Start 2P'",size:7 }, boxWidth:10 } } },
-      scales:{ x:{ grid:{color:'#111'}, ticks:{font:{size:8},maxTicksLimit:8} }, y:{ grid:{color:'#111'}, ticks:{font:{size:8},stepSize:1,beginAtZero:true} } }
+      plugins:{ legend:{ labels:{ boxWidth:10, padding:12 } } },
+      scales:{ x:{ grid:{color:'#f3f4f6'}, ticks:{maxTicksLimit:6,font:{size:10}} }, y:{ grid:{color:'#f3f4f6'}, ticks:{stepSize:1,font:{size:10},beginAtZero:true} } }
     }
   });
+
   const dCtx = document.getElementById('donutChart').getContext('2d');
   donutChart = new Chart(dCtx, {
     type:'doughnut',
-    data:{ labels:['GREEN','YELLOW','RED'], datasets:[{ data:[1,1,1], backgroundColor:['rgba(0,255,68,0.7)','rgba(255,255,0,0.7)','rgba(255,51,51,0.7)'], borderColor:['#00ff44','#ffff00','#ff3333'], borderWidth:2 }] },
-    options:{ responsive:true, maintainAspectRatio:false, animation:false, cutout:'60%',
-      plugins:{ legend:{ position:'bottom', labels:{ font:{ family:"'Press Start 2P'",size:6 }, boxWidth:8, padding:6 } } }
+    data:{ labels:['Green','Yellow','Red'], datasets:[{ data:[1,1,1], backgroundColor:['rgba(34,197,94,.8)','rgba(245,158,11,.8)','rgba(239,68,68,.8)'], borderColor:['#22c55e','#f59e0b','#ef4444'], borderWidth:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false, animation:false, cutout:'65%',
+      plugins:{ legend:{ position:'bottom', labels:{ boxWidth:8, padding:8, font:{size:10} } } }
     }
   });
 }
@@ -948,26 +762,19 @@ function updateCharts() {
   donutChart.update();
 }
 
-// ── Firebase + Commands (UNCHANGED) ──────────────────
+/* ══════════════════════════════════
+   FIREBASE + COMMANDS (unchanged)
+══════════════════════════════════ */
 window.addEventListener('load', () => {
-  initBuildings();
-  initOverheadArm();
-  initPalmTrees();
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
   initCharts();
-
-  // Pre-seed vehicles
-  setTimeout(()=>spawnVehicle('normal'),   300);
-  setTimeout(()=>spawnVehicle('oncoming'), 800);
-  setTimeout(()=>spawnVehicle('normal'),   1400);
-  setTimeout(()=>spawnVehicle('oncoming'), 1900);
-  setTimeout(()=>spawnVehicle('normal'),   2600);
-
-  gameLoop();
   setInterval(updateClock, 1000);
   updateClock();
-  addLog('SYSTEM BOOT OK', 'green');
-  addLog('SAYRE HWY ONLINE', 'blue');
-  addLog('INSERT COIN', 'yellow');
+  requestAnimationFrame(gameLoop);
+  addLog('System boot OK', 'green');
+  addLog('Sayre Hwy node online', 'blue');
+  addLog('Drive with W / ↑  +  A D', 'blue');
 
   try {
     const app = firebase.initializeApp(firebaseConfig);
@@ -977,9 +784,9 @@ window.addEventListener('load', () => {
       if (data) applyState(data.trafficLightState||'OFF', data.mode||0, data.countdown||0);
     });
     setFbStatus(true);
-    addLog('FIREBASE CONNECTED','green');
+    addLog('Firebase connected','green');
   } catch(e) {
-    addLog('FIREBASE ERR: '+e.message,'red');
+    addLog('Firebase error: ' + e.message,'red');
     setFbStatus(false);
   }
 });
@@ -987,10 +794,8 @@ window.addEventListener('load', () => {
 function sendCommand(mode) {
   currentMode = mode;
   updateModeDisplay(mode);
-  score += 50;
-  updateScore();
-  if (db) { db.ref('/trafficLight/mode').set(mode); addLog(`CMD MODE=${mode}`, mode===1?'green':mode===2?'yellow':'red'); }
-  else addLog('NOT CONNECTED','red');
+  if (db) { db.ref('/trafficLight/mode').set(mode); addLog(`Mode → ${['Off','Normal','Blink'][mode]}`, mode===1?'green':mode===2?'yellow':'red'); }
+  else addLog('Not connected','red');
 }
 
 function applyState(state, mode, countdown) {
@@ -1001,88 +806,76 @@ function applyState(state, mode, countdown) {
     if (state !== 'OFF' && state !== 'BLINK') {
       if (metrics[state] !== undefined) {
         metrics[state]++; metrics.total++;
-        if (state==='GREEN' && prev==='RED') { cycleCount++; score+=200; updateScore(); }
-        if (state==='RED') { waitEvents++; totalWaitTime+=5; }
+        if (state==='GREEN' && prev==='RED') cycleCount++;
+        if (state==='RED') { waitEvents++; totalWaitTime += 5; }
       }
       updateCharts();
     }
-    addLog(`STATE→${state}`, state.toLowerCase()==='green'?'green':state.toLowerCase()==='red'?'red':state.toLowerCase()==='yellow'?'yellow':'blue');
+    addLog(`State → ${state}`, state==='GREEN'?'green':state==='RED'?'red':state==='YELLOW'?'yellow':'blue');
   }
   updateLights(state);
   updateCountdown(countdown, state);
   updateModeDisplay(mode);
-  updateOverheadBulbs(state);
-  updateLaneDashes(state);
   setEspStatus(state !== 'OFF');
   document.getElementById('m-green').textContent  = metrics.GREEN;
   document.getElementById('m-yellow').textContent = metrics.YELLOW;
   document.getElementById('m-red').textContent    = metrics.RED;
   document.getElementById('m-total').textContent  = metrics.total;
-  document.getElementById('m-avg').textContent    = waitEvents>0 ? Math.round(totalWaitTime/waitEvents) : 0;
   document.getElementById('cycleVal').textContent = cycleCount;
-  document.getElementById('prevVal').textContent  = prev!==state&&prev!=='OFF' ? prev.slice(0,3) : '---';
+  document.getElementById('prevVal').textContent  = prev!==state&&prev!=='OFF'?prev.slice(0,3):'---';
 }
 
 function updateLights(state) {
   const r=document.getElementById('bulbRed'), y=document.getElementById('bulbYellow'), g=document.getElementById('bulbGreen');
-  r.className='tl-bulb'; y.className='tl-bulb'; g.className='tl-bulb';
-  const lbl=document.getElementById('stateLabel'); lbl.className='state-banner';
-  if (state==='BLINK')  { r.className+=' red-on blink-anim'; y.className+=' yellow-on blink-anim'; g.className+=' green-on blink-anim'; lbl.textContent='⚡ BLINK'; lbl.classList.add('yellow'); }
-  else if (state==='RED')    { r.className+=' red-on'; y.className+=' yellow-off'; g.className+=' green-off'; lbl.textContent='🔴 STOP'; lbl.classList.add('red'); }
-  else if (state==='YELLOW') { r.className+=' red-off'; y.className+=' yellow-on'; g.className+=' green-off'; lbl.textContent='🟡 WAIT'; lbl.classList.add('yellow'); }
-  else if (state==='GREEN')  { r.className+=' red-off'; y.className+=' yellow-off'; g.className+=' green-on'; lbl.textContent='🟢 GO!'; lbl.classList.add('green'); }
-  else { r.className+=' red-off'; y.className+=' yellow-off'; g.className+=' green-off'; lbl.textContent='-- OFF --'; lbl.classList.add('off'); }
+  const lbl=document.getElementById('stateLabel');
+  r.className='tl-bulb'; y.className='tl-bulb'; g.className='tl-bulb'; lbl.className='state-badge';
+  if (state==='BLINK')       { r.classList.add('red-on','blink-anim'); y.classList.add('yellow-on','blink-anim'); g.classList.add('green-on','blink-anim'); lbl.textContent='⚡ Blink Mode'; lbl.classList.add('yellow'); }
+  else if (state==='RED')    { r.classList.add('red-on');    lbl.textContent='🔴 Stop';    lbl.classList.add('red'); }
+  else if (state==='YELLOW') { y.classList.add('yellow-on'); lbl.textContent='🟡 Caution'; lbl.classList.add('yellow'); }
+  else if (state==='GREEN')  { g.classList.add('green-on');  lbl.textContent='🟢 Go';      lbl.classList.add('green'); }
+  else { lbl.textContent='— Offline —'; }
 }
 
 function updateCountdown(secs, state) {
   const num=document.getElementById('cdNum'), bar=document.getElementById('cdBar');
-  const maxSecs = state==='YELLOW' ? 2 : 5;
+  const maxSecs = state==='YELLOW'?2:5;
   num.textContent = secs>0 ? String(secs).padStart(2,'0') : '--';
-  num.className = 'cd-number '+(state||'').toLowerCase();
-  bar.style.width = (maxSecs>0 ? Math.min(100,(secs/maxSecs)*100) : 0)+'%';
-  bar.style.background = state==='GREEN'?'var(--green)':state==='YELLOW'?'var(--yellow)':state==='RED'?'var(--red)':'#333';
-}
-
-function updateOverheadBulbs(state) {
-  ['r','y','g'].forEach(c => {
-    const el = document.getElementById(`asb-${c}`);
-    if (!el) return;
-    el.className = `asbulb ${c}`;
-  });
-  if (state==='RED')    document.getElementById('asb-r')?.classList.add('on');
-  if (state==='YELLOW') document.getElementById('asb-y')?.classList.add('on');
-  if (state==='GREEN')  document.getElementById('asb-g')?.classList.add('on');
-  if (state==='BLINK')  ['r','y','g'].forEach(c=>document.getElementById(`asb-${c}`)?.classList.add('on','blink-anim'));
+  num.className = 'cd-num ' + (state||'').toLowerCase();
+  bar.style.width = maxSecs>0 ? Math.min(100,(secs/maxSecs)*100)+'%' : '0%';
+  bar.style.background = state==='GREEN'?'#22c55e':state==='YELLOW'?'#f59e0b':state==='RED'?'#ef4444':'#9ca3af';
 }
 
 function updateModeDisplay(mode) {
-  [0,1,2].forEach(m=>{ const el=document.getElementById(`m${m}`); el.textContent=m===mode?'◉':'○'; el.classList.toggle('active',m===mode); });
-  document.getElementById('modeVal').textContent = {0:'OFF',1:'NRM',2:'BLK'}[mode]||'---';
-}
-function updateScore() { document.getElementById('scoreVal').textContent=String(score).padStart(6,'0'); }
-function setFbStatus(ok) { document.getElementById('fbDot').className='pill-dot '+(ok?'on':'off'); document.getElementById('fbLabel').textContent=ok?'FIREBASE':'OFFLINE'; }
-function setEspStatus(ok) { document.getElementById('espDot').className='pill-dot '+(ok?'on':''); document.getElementById('espLabel').textContent=ok?'ESP32 ON':'ESP32 OFF'; }
-function addLog(msg,cls='') {
-  const log=document.getElementById('eventLog');
-  const t=new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const e=document.createElement('div'); e.className='log-entry';
-  e.innerHTML=`<span class="log-time">${t}</span><span class="log-msg ${cls}">${msg}</span>`;
-  log.prepend(e);
-  while(log.children.length>10) log.removeChild(log.lastChild);
-}
-function updateClock() {
-  document.getElementById('clockDisplay').textContent=new Date().toLocaleTimeString('en',{hour12:false});
-  const el=Math.floor((Date.now()-startTime)/1000);
-  document.getElementById('uptimeVal').textContent=String(Math.floor(el/60)).padStart(2,'0')+':'+String(el%60).padStart(2,'0');
+  [0,1,2].forEach(m => {
+    const el = document.getElementById(`m${m}`);
+    if (el) el.classList.toggle('active', m === mode);
+  });
+  document.getElementById('modeVal').textContent = {0:'Off',1:'Normal',2:'Blink'}[mode]||'---';
 }
 
-// ── Game Loop ─────────────────────────────────────────
-let lastFrame = performance.now();
-function gameLoop(ts = performance.now()) {
-  const dt = ts - lastFrame;
-  lastFrame = ts;
-  updateVehicles(dt);
-  requestAnimationFrame(gameLoop);
+function setFbStatus(ok) {
+  document.getElementById('fbDot').className = 'status-dot' + (ok ? ' connected' : '');
+  document.getElementById('fbLabel').textContent = ok ? 'Firebase' : 'Offline';
+}
+function setEspStatus(ok) {
+  document.getElementById('espDot').className = 'status-dot' + (ok ? ' active' : '');
+  document.getElementById('espLabel').textContent = ok ? 'ESP32 On' : 'ESP32 Off';
+}
+
+function addLog(msg, cls='') {
+  const log = document.getElementById('eventLog');
+  const t = new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const e = document.createElement('div');
+  e.className = 'log-entry';
+  e.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${cls}">${msg}</span>`;
+  log.prepend(e);
+  while (log.children.length > 8) log.removeChild(log.lastChild);
+}
+
+function updateClock() {
+  document.getElementById('clockDisplay').textContent = new Date().toLocaleTimeString('en',{hour12:false});
+  const el = Math.floor((Date.now()-startTime)/1000);
+  document.getElementById('uptimeVal').textContent = String(Math.floor(el/60)).padStart(2,'0')+':'+String(el%60).padStart(2,'0');
 }
 </script>
 </body>
