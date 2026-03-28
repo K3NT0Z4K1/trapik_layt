@@ -3,28 +3,27 @@
  * ESP32 Traffic Light Simulation with Firebase
  * =====================================================
  * Hardware:
- *   - Red LED    → GPIO 23
- *   - Yellow LED → GPIO 22
- *   - Green LED  → GPIO 21
+ *   - Red LED    → GPIO 4
+ *   - Yellow LED → GPIO 5
+ *   - Green LED  → GPIO 18
  *   - All LEDs with 220Ω resistors to GND
  *
- * Libraries Required (install via Arduino Library Manager):
- *   - Firebase ESP Client by Mobizt
- *   - ArduinoJson
+ * Library: Firebase Arduino Client Library for ESP8266
+ *          and ESP32 by Mobizt (v4.4.17)
  * =====================================================
  */
 
 #include <WiFi.h>
-#include <FirebaseESP32.h>
-#include <ArduinoJson.h>
+#include <Firebase_ESP_Client.h>
 
 // ─── WiFi Credentials ──────────────────────────────
 #define WIFI_SSID     "K3NT0Z4K1"
 #define WIFI_PASSWORD "12345678"
 
 // ─── Firebase Credentials ──────────────────────────
-#define FIREBASE_HOST "traffic-sim-5a9ef-default-rtdb.asia-southeast1.firebasedatabase.app"
-#define FIREBASE_AUTH "7etDsjZimq0GkGepNOJ61hIY9HYvruznDSW0A0kZ"
+// Using Database Secret (legacy token) — most reliable method
+#define FIREBASE_DB_URL  "traffic-sim-5a9ef-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define FIREBASE_SECRET  "7etDsjZimq0GkGepNOJ61hIY9HYvruznDSW0A0kZ"
 
 // ─── LED Pin Definitions ───────────────────────────
 #define RED_PIN    4
@@ -32,27 +31,28 @@
 #define GREEN_PIN  18
 
 // ─── Traffic Light Timing (milliseconds) ───────────
-#define GREEN_DURATION  5000
-#define YELLOW_DURATION 2000
-#define RED_DURATION    5000
+#define GREEN_DURATION  15000
+#define YELLOW_DURATION 5000
+#define RED_DURATION    20000
 #define BLINK_INTERVAL  300
 
 // ─── Firebase Objects ───────────────────────────────
-FirebaseData fbData;
-FirebaseAuth auth;
+FirebaseData   fbData;
+FirebaseAuth   auth;
 FirebaseConfig config;
 
 // ─── State Variables ───────────────────────────────
 enum TrafficState { STATE_RED, STATE_YELLOW, STATE_GREEN, STATE_OFF, STATE_BLINK };
 
-TrafficState currentState   = STATE_RED;
-int          currentMode    = 1;     // 0=OFF, 1=NORMAL, 2=BLINK
-int          countdown      = 5;
-bool         blinkOn        = false;
-unsigned long lastUpdate    = 0;
-unsigned long lastFirebase  = 0;
-unsigned long lastBlink     = 0;
-unsigned long phaseStart    = 0;
+TrafficState  currentState  = STATE_GREEN;
+int           currentMode   = 1;
+bool          blinkOn       = false;
+bool          firebaseReady = false;
+
+unsigned long lastUpdate   = 0;
+unsigned long lastFirebase = 0;
+unsigned long lastBlink    = 0;
+unsigned long phaseStart   = 0;
 
 // ─── Helper: All LEDs OFF ──────────────────────────
 void allOff() {
@@ -70,7 +70,8 @@ void setLight(int r, int y, int g) {
 
 // ─── Send State to Firebase ────────────────────────
 void sendStateToFirebase(const char* state, int cdSecs) {
-  if (millis() - lastFirebase < 250) return; // throttle to 4x/sec
+  if (!firebaseReady) return;
+  if (millis() - lastFirebase < 250) return;
   lastFirebase = millis();
 
   FirebaseJson json;
@@ -79,26 +80,27 @@ void sendStateToFirebase(const char* state, int cdSecs) {
   json.set("countdown",         cdSecs);
   json.set("timestamp",         (int)(millis() / 1000));
 
-  Firebase.setJSON(fbData, "/trafficLight", json);
+  if (!Firebase.RTDB.setJSON(&fbData, "/trafficLight", &json)) {
+    Serial.print("[Firebase] Write error: ");
+    Serial.println(fbData.errorReason());
+  } else {
+    Serial.printf("[Firebase] ✓ Sent: %s (%ds)\n", state, cdSecs);
+  }
 }
 
 // ─── Read Mode Command from Firebase ───────────────
 void checkFirebaseMode() {
-  if (Firebase.getInt(fbData, "/trafficLight/mode")) {
+  if (!firebaseReady) return;
+
+  if (Firebase.RTDB.getInt(&fbData, "/trafficLight/mode")) {
     int newMode = fbData.intData();
     if (newMode != currentMode) {
       currentMode = newMode;
-      Serial.printf("Mode changed to: %d\n", currentMode);
+      Serial.printf("[Mode] Changed to: %d\n", currentMode);
       phaseStart = millis();
-
-      if (currentMode == 0) {
-        allOff();
-        currentState = STATE_OFF;
-      } else if (currentMode == 2) {
-        currentState = STATE_BLINK;
-      } else {
-        currentState = STATE_GREEN;
-      }
+      if      (currentMode == 0) { allOff(); currentState = STATE_OFF; }
+      else if (currentMode == 2) { currentState = STATE_BLINK; }
+      else                       { currentState = STATE_GREEN; }
     }
   }
 }
@@ -109,40 +111,38 @@ void runNormalCycle() {
 
   switch (currentState) {
     case STATE_GREEN:
-  setLight(0, 0, 1);
-  countdown = max(0L, (long)(GREEN_DURATION - (long)elapsed) / 1000L);
-  sendStateToFirebase("GREEN", countdown);
-  if (elapsed >= GREEN_DURATION) {
-    currentState = STATE_YELLOW;
-    phaseStart = millis();
-    Serial.println("→ YELLOW");
-  }
-  break;
+      setLight(0, 0, 1);
+      sendStateToFirebase("GREEN", max(0L, (long)(GREEN_DURATION - elapsed) / 1000L));
+      if (elapsed >= GREEN_DURATION) {
+        currentState = STATE_YELLOW;
+        phaseStart   = millis();
+        Serial.println("[Traffic] GREEN → YELLOW");
+      }
+      break;
 
-case STATE_YELLOW:
-  setLight(0, 1, 0);
-  countdown = max(0L, (long)(YELLOW_DURATION - (long)elapsed) / 1000L);
-  sendStateToFirebase("YELLOW", countdown);
-  if (elapsed >= YELLOW_DURATION) {
-    currentState = STATE_RED;
-    phaseStart = millis();
-    Serial.println("→ RED");
-  }
-  break;
+    case STATE_YELLOW:
+      setLight(0, 1, 0);
+      sendStateToFirebase("YELLOW", max(0L, (long)(YELLOW_DURATION - elapsed) / 1000L));
+      if (elapsed >= YELLOW_DURATION) {
+        currentState = STATE_RED;
+        phaseStart   = millis();
+        Serial.println("[Traffic] YELLOW → RED");
+      }
+      break;
 
-case STATE_RED:
-  setLight(1, 0, 0);
-  countdown = max(0L, (long)(RED_DURATION - (long)elapsed) / 1000L);
-  sendStateToFirebase("RED", countdown);
-  if (elapsed >= RED_DURATION) {
-    currentState = STATE_GREEN;
-    phaseStart = millis();
-    Serial.println("→ GREEN");
-  }
-  break;
+    case STATE_RED:
+      setLight(1, 0, 0);
+      sendStateToFirebase("RED", max(0L, (long)(RED_DURATION - elapsed) / 1000L));
+      if (elapsed >= RED_DURATION) {
+        currentState = STATE_GREEN;
+        phaseStart   = millis();
+        Serial.println("[Traffic] RED → GREEN");
+      }
+      break;
+
     default:
       currentState = STATE_GREEN;
-      phaseStart = millis();
+      phaseStart   = millis();
       break;
   }
 }
@@ -151,7 +151,7 @@ case STATE_RED:
 void runBlinkMode() {
   if (millis() - lastBlink >= BLINK_INTERVAL) {
     lastBlink = millis();
-    blinkOn = !blinkOn;
+    blinkOn   = !blinkOn;
     setLight(blinkOn, blinkOn, blinkOn);
   }
   sendStateToFirebase("BLINK", 0);
@@ -160,57 +160,93 @@ void runBlinkMode() {
 // ─── Setup ─────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
+  delay(500);
+  Serial.println("\n=== ESP32 Traffic Light Starting ===");
 
+  // LED pins
   pinMode(RED_PIN,    OUTPUT);
   pinMode(YELLOW_PIN, OUTPUT);
   pinMode(GREEN_PIN,  OUTPUT);
   allOff();
 
-  // Connect to WiFi
-  Serial.printf("\nConnecting to WiFi: %s\n", WIFI_SSID);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.printf("\nConnected! IP: %s\n", WiFi.localIP().toString().c_str());
+  // Quick LED test
+  Serial.println("[LED] Testing all LEDs...");
+  setLight(1, 0, 0); delay(400);
+  setLight(0, 1, 0); delay(400);
+  setLight(0, 0, 1); delay(400);
+  allOff();
 
-  // Connect to Firebase
-  config.host = FIREBASE_HOST;
-  config.signer.tokens.legacy_token = FIREBASE_AUTH;
+  // Connect WiFi
+  Serial.printf("[WiFi] Connecting to: %s\n", WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  int wifiTries = 0;
+  while (WiFi.status() != WL_CONNECTED && wifiTries < 30) {
+    digitalWrite(RED_PIN, HIGH); delay(300);
+    digitalWrite(RED_PIN, LOW);  delay(300);
+    Serial.print(".");
+    wifiTries++;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\n[WiFi] FAILED to connect! Check SSID/Password.");
+    Serial.println("[WiFi] Restarting in 5 seconds...");
+    delay(5000);
+    ESP.restart();
+  }
+
+  Serial.printf("\n[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+  allOff();
+
+  // ── Firebase Setup using Database Secret (legacy token) ──
+  // This method skips token generation — connects instantly!
+  config.database_url              = FIREBASE_DB_URL;
+  config.signer.tokens.legacy_token = FIREBASE_SECRET;
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  // Write initial mode to Firebase
-  Firebase.setInt(fbData, "/trafficLight/mode", 1);
-  Serial.println("Firebase connected. Starting cycle...");
+  // Short wait then check
+  delay(2000);
 
-  phaseStart = millis();
+  if (Firebase.ready()) {
+    firebaseReady = true;
+    Serial.println("[Firebase] ✓ Connected using Database Secret!");
+    Firebase.RTDB.setInt(&fbData, "/trafficLight/mode", 1);
+  } else {
+    Serial.println("[Firebase] Not ready yet — will retry in loop.");
+  }
+
+  phaseStart   = millis();
   currentState = STATE_GREEN;
+  Serial.println("[Traffic] Cycle starting: GREEN → YELLOW → RED\n");
 }
 
 // ─── Main Loop ─────────────────────────────────────
 void loop() {
+  // Keep retrying Firebase if not connected yet
+  if (!firebaseReady && Firebase.ready()) {
+    firebaseReady = true;
+    Serial.println("[Firebase] ✓ Now connected!");
+    Firebase.RTDB.setInt(&fbData, "/trafficLight/mode", 1);
+  }
+
   // Poll Firebase for mode changes every 500ms
   if (millis() - lastUpdate >= 500) {
     lastUpdate = millis();
     checkFirebaseMode();
   }
 
-  // Execute current mode
+  // Run current mode
   switch (currentMode) {
-    case 0: // OFF
+    case 0:
       allOff();
       sendStateToFirebase("OFF", 0);
       delay(1000);
       break;
-
-    case 1: // Normal cycle
+    case 1:
       runNormalCycle();
       break;
-
-    case 2: // Blink all
+    case 2:
       runBlinkMode();
       break;
   }
